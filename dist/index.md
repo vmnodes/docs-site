@@ -26,9 +26,11 @@ Read the other concept pages when a task touches them: [orgs and people](concept
 | Build an app where people fill in a form and see a list | [Build a form-and-list app](how-to/form-and-list.md) |
 | One person submits, another approves | [Submit and approve](how-to/approvals.md) |
 | Keep data when the app is updated | [Keep data through updates](how-to/keep-data-through-updates.md) |
-| Share your app's records with other apps in the org | [Share data](how-to/share-data.md) |
+| Share your app's records with other apps in the org, keeping some fields private | [Share data](how-to/share-data.md) |
 | Read records another app shares | [Read shared data](how-to/read-shared-data.md) |
 | Change an app someone else built | [Change an app](how-to/change-an-app.md) |
+| Show dates, "today", overdue or this week in the business's time zone | [Dates and time zones](how-to/dates-and-time-zones.md) |
+| Run the database tests on your own computer | [Test with a scratch database](how-to/test-with-a-scratch-database.md) |
 
 When something fails, search [Troubleshooting](troubleshooting.md) for the exact message you saw. Facts you may need while building are in the reference pages: [environment variables](reference/environment.md), [build and run](reference/build-and-run.md), [the identity package](reference/identity-sdk.md), [the publish API](reference/publish-api.md) and [limits](reference/limits.md).
 

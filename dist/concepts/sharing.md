@@ -101,6 +101,7 @@ An administrator opens the app's **Shares** tab. Each shared record type is a ca
 
 - **Fields are not shared until an administrator switches them on.** A field of an app's record type starts **Not shared**, with the badge "Waiting for your decision", and the tab says "N fields are waiting for your decision." Publishing a field does not share it.
 - Press **Turn on** on a field. A page asks "Share <field>?", names who would be able to read it (or says no app reads it yet), and has a button **Share <field>**. A field that looks like a contact detail carries the badge "Contact detail" and "Usually kept private."
+- **Turning a field on does not fill in records that were published before.** Those records carry the field only after your app publishes them again. Publish every current record at each start-up, as the starter does, and an update or the next change fills the field in.
 - Press **Turn off** on a shared field. This takes effect at once and removes that field's values from the platform's copy of the records. Your app's own data is untouched.
 - The card's **Who can read this** list names the apps, groups and people who can read the record type.
 - An app that publishes nothing shows "Your app doesn't share anything yet."

@@ -1,6 +1,6 @@
 # Reading shared data
 
-Discover, describe and query the entities other apps share, ask a question in plain language, and pin the answers as charts. What a caller sees is decided by data grants, not by the request. An entity with no grant for the caller is invisible. Grants are created by an organisation administrator: ask your VMnodes contact. Ask your VMnodes contact for an API token.
+Discover, describe and query the entities other apps share, ask a question in plain language, and pin the answers as charts. What a caller sees is decided by data grants, not by the request. An entity with no grant for the caller is invisible. A grant is created with POST /v1/data/grants by a caller holding an administrator-scoped API token for your org. The portal cannot issue API tokens or create grants today, even for an org administrator, so ask your VMnodes contact to create the grant and to give your app its token.
 
 ## List entities
 

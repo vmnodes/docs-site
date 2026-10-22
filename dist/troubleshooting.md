@@ -419,6 +419,14 @@ The card is headed **Deployment** and sits on the **People** tab of the app. It 
 
 It worked when the card reads `Your app is now running the latest commit.`
 
+### The card keeps reading `Updating to <commit>…`
+
+**What it means.** Usually nothing is wrong. An update normally goes live within about two minutes, but the card can keep showing `Updating to` for a while after the new version is serving, especially in a browser tab that is in the background.
+
+**What to do.** Open the app's `/health` in your signed-in browser. When its `buildCommit` is the commit you pushed, the update is live; reload the **People** tab to see the card catch up. If `/health` still shows the old commit after ten minutes, press **Update to latest commit** again.
+
+It worked when `/health` reports the new `buildCommit`.
+
 ### `We couldn't find the latest commit to update to, so nothing was built. Try again.`
 
 **What it means.** VMnodes could not read the head of the repository's default branch. The repository was renamed or made private, or GitHub access was removed.
@@ -962,6 +970,16 @@ It worked when `requireRole` stops throwing.
 **What it means.** Status 403. The person is not in the group `requireGroup` or `requireGroupId` asked for.
 
 **What to do.** Ask your VMnodes contact to add the person to the group, or attach a group that holds them under **Groups** on the **People** tab. It worked when `requireGroup` stops throwing.
+
+## In the browser
+
+### `ERR_CERT_AUTHORITY_INVALID`, or another certificate warning, on a new app's address
+
+**What it means.** The app's https certificate is still being issued. This happens for a few minutes after a new app's first launch reads **Working**.
+
+**What to do.** Wait a few minutes and reload. Never click through the warning, and never tell a customer to. If the warning is still there after fifteen minutes, ask your VMnodes contact.
+
+It worked when the app opens with no warning.
 
 ## When signing in
 

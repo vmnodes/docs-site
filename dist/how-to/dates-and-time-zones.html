@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dates and time zones · VMnodes docs</title>
+<meta name="description" content="Show &quot;today&quot;, due dates, weeks and booking times in the business&#39;s own time zone, not the server&#39;s. Read this before you build anything that shows a date, decides what is overdue, counts by day or week, or takes a time from a form.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/dates-and-time-zones.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li><li><a class="vm-tap" href="/how-to/dates-and-time-zones" aria-current="page">Dates and time zones</a></li><li><a class="vm-tap" href="/how-to/test-with-a-scratch-database">Test with a scratch database</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="dates-and-time-zones">Dates and time zones</h1>
+<p>Show &quot;today&quot;, due dates, weeks and booking times in the business&#39;s own time zone, not the server&#39;s. Read this before you build anything that shows a date, decides what is overdue, counts by day or week, or takes a time from a form.</p>
+<h2 id="the-rule">The rule<a class="d-anchor" href="#the-rule" aria-label="Link to this section">#</a></h2>
+<p>Your app&#39;s server runs in UTC. The platform sets no time-zone variable, and the official Node images default to UTC. So <code>new Date()</code>, <code>toISOString()</code> and a date taken with <code>.slice(0, 10)</code> are all UTC.</p>
+<p>For a business in Sydney, 9:30 in the morning on 23 October is still 22 October in UTC. An app that uses UTC dates shows that morning&#39;s returns as returned &quot;yesterday&quot;, calls a loan due today overdue, and counts early-morning bookings on the wrong day.</p>
+<p>Keep two kinds of value apart:</p>
+<div class="d-table"><table><thead><tr><th scope="col">Value</th><th scope="col">Example</th><th scope="col">Store it as</th><th scope="col">Show it</th></tr></thead><tbody><tr><td>An instant: when something happened or is booked</td><td>returned at, starts at</td><td>a UTC timestamp (<code>timestamptz</code>, or an ISO string ending in <code>Z</code>)</td><td>converted to the business&#39;s zone with <code>dateIn</code></td></tr><tr><td>A calendar date a person chose</td><td>due back on, date it came in</td><td>the date string <code>YYYY-MM-DD</code>, with no time</td><td>as it is</td></tr></tbody></table></div>
+<p>Decide &quot;today&quot;, &quot;overdue&quot; and &quot;this week&quot; in the business&#39;s zone. Never decide them from the server&#39;s clock alone.</p>
+<h2 id="1-know-the-businesss-time-zone">1. Know the business&#39;s time zone<a class="d-anchor" href="#1-know-the-businesss-time-zone" aria-label="Link to this section">#</a></h2>
+<p>Ask the customer which city they work in, and use its IANA name, such as <code>Australia/Sydney</code> or <code>Europe/London</code>. If nobody can answer, choose one, write the question in your report, and print the zone on the page (step 4), so a wrong guess is visible.</p>
+<p>Set it in your <code>Dockerfile</code>. The portal has no place to set a variable:</p>
+<pre data-lang="dockerfile"><code>ENV APP_TIME_ZONE=Australia/Sydney</code></pre>
+<p>It worked when the app&#39;s page names that zone (step 4).</p>
+<h2 id="2-add-the-date-helpers">2. Add the date helpers<a class="d-anchor" href="#2-add-the-date-helpers" aria-label="Link to this section">#</a></h2>
+<p>Save this as <code>dates.js</code>. It needs nothing beyond Node: the zone rules come with Node&#39;s built-in <code>Intl</code>.</p>
+<pre data-lang="js"><code>// Calendar dates and wall-clock times in the business&#39;s time zone. The server&#39;s clock is UTC.
+export const TIME_ZONE = process.env.APP_TIME_ZONE || &quot;Australia/Sydney&quot;;
+
+const parts = (instant, timeZone) =&gt; Object.fromEntries(
+  new Intl.DateTimeFormat(&quot;en-US&quot;, { timeZone, hourCycle: &quot;h23&quot;, year: &quot;numeric&quot;, month: &quot;2-digit&quot;, day: &quot;2-digit&quot;, hour: &quot;2-digit&quot;, minute: &quot;2-digit&quot;, second: &quot;2-digit&quot; })
+    .formatToParts(instant).map((p) =&gt; [p.type, p.value]));
+
+/** The calendar date, &quot;YYYY-MM-DD&quot;, that `instant` falls on in `timeZone`. */
+export function dateIn(instant, timeZone = TIME_ZONE) {
+  const p = parts(new Date(instant), timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+/** Today&#39;s date in `timeZone`. */
+export const todayIn = (timeZone = TIME_ZONE, now = new Date()) =&gt; dateIn(now, timeZone);
+
+/** The Monday that starts the calendar week holding `date` (&quot;YYYY-MM-DD&quot;). */
+export function mondayOf(date) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** A wall-clock time typed in `timeZone` (&quot;YYYY-MM-DDTHH:MM&quot;, as &lt;input type=&quot;datetime-local&quot;&gt; sends it), as a UTC instant. */
+export function wallTimeToInstant(local, timeZone = TIME_ZONE) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) throw new Error(`expected YYYY-MM-DDTHH:MM, got ${local}`);
+  const asUtc = new Date(`${local}:00Z`).getTime();
+  const offsetAt = (t) =&gt; { const p = parts(new Date(t), timeZone); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - t; };
+  const first = asUtc - offsetAt(asUtc);
+  return new Date(asUtc - offsetAt(first)); // a second pass settles times near a daylight-saving change
+}</code></pre>
+<p>How to use it:</p>
+<ul><li><strong>&quot;Today&quot; and &quot;overdue&quot;.</strong> <code>const today = todayIn()</code>. A loan is overdue when <code>dueOn &lt; today</code>. Compare as strings: <code>YYYY-MM-DD</code> sorts in date order. A loan due today is not overdue.</li><li><strong>The date an instant falls on.</strong> <code>dateIn(returnedAt)</code>, never <code>returnedAt.slice(0, 10)</code>.</li><li><strong>This week.</strong> A booking is in the calendar week starting Monday when <code>mondayOf(dateIn(b.startsAt)) === mondayOf(todayIn())</code>. Say on the page which week you mean.</li><li><strong>A time typed into a form.</strong> <code>&lt;input type=&quot;datetime-local&quot;&gt;</code> sends a wall-clock time with no zone, such as <code>2026-11-05T10:30</code>. Store <code>wallTimeToInstant(value).toISOString()</code>. To fill the input back in, show the instant in the business&#39;s zone.</li></ul>
+<h2 id="3-test-them">3. Test them<a class="d-anchor" href="#3-test-them" aria-label="Link to this section">#</a></h2>
+<p>Save this as <code>test/dates.js</code> and run <code>node test/dates.js</code>.</p>
+<pre data-lang="js"><code>import assert from &quot;node:assert/strict&quot;;
+import { dateIn, todayIn, mondayOf, wallTimeToInstant } from &quot;../dates.js&quot;;
+let passed = 0;
+const check = (name, got, want) =&gt; { assert.deepEqual(got, want, name); passed++; console.log(`ok   ${name}`); };
+// 13:30 UTC on 22 Oct is already 23 Oct in Sydney (UTC+11 in October): the bug the UTC date causes.
+check(&quot;an instant&#39;s Sydney date, not its UTC date&quot;, dateIn(&quot;2026-10-22T13:30:00Z&quot;, &quot;Australia/Sydney&quot;), &quot;2026-10-23&quot;);
+check(&quot;the same instant&#39;s UTC date&quot;, dateIn(&quot;2026-10-22T13:30:00Z&quot;, &quot;UTC&quot;), &quot;2026-10-22&quot;);
+check(&quot;today in a zone&quot;, todayIn(&quot;Australia/Sydney&quot;, new Date(&quot;2026-10-22T22:00:00Z&quot;)), &quot;2026-10-23&quot;);
+check(&quot;Monday of a Thursday&quot;, mondayOf(&quot;2026-10-22&quot;), &quot;2026-10-19&quot;);
+check(&quot;Monday of a Sunday is the Monday before&quot;, mondayOf(&quot;2026-10-25&quot;), &quot;2026-10-19&quot;);
+check(&quot;Monday of a Monday is itself&quot;, mondayOf(&quot;2026-10-19&quot;), &quot;2026-10-19&quot;);
+check(&quot;10:30 Sydney in November is 23:30 UTC the day before&quot;, wallTimeToInstant(&quot;2026-11-05T10:30&quot;, &quot;Australia/Sydney&quot;).toISOString(), &quot;2026-11-04T23:30:00.000Z&quot;);
+check(&quot;10:30 Sydney in June (no daylight saving) is 00:30 UTC&quot;, wallTimeToInstant(&quot;2026-06-05T10:30&quot;, &quot;Australia/Sydney&quot;).toISOString(), &quot;2026-06-05T00:30:00.000Z&quot;);
+check(&quot;the day daylight saving starts, after the change&quot;, wallTimeToInstant(&quot;2026-10-04T03:30&quot;, &quot;Australia/Sydney&quot;).toISOString(), &quot;2026-10-03T16:30:00.000Z&quot;);
+check(&quot;the day daylight saving starts, BEFORE the change (one pass gets this an hour out)&quot;, wallTimeToInstant(&quot;2026-10-04T01:30&quot;, &quot;Australia/Sydney&quot;).toISOString(), &quot;2026-10-03T15:30:00.000Z&quot;);
+check(&quot;New York in July&quot;, wallTimeToInstant(&quot;2026-07-01T09:00&quot;, &quot;America/New_York&quot;).toISOString(), &quot;2026-07-01T13:00:00.000Z&quot;);
+check(&quot;a round trip gives the typed date back&quot;, dateIn(wallTimeToInstant(&quot;2026-11-05T00:15&quot;, &quot;Australia/Sydney&quot;), &quot;Australia/Sydney&quot;), &quot;2026-11-05&quot;);
+assert.throws(() =&gt; wallTimeToInstant(&quot;5 Nov 10:30&quot;), /expected YYYY-MM-DDTHH:MM/); passed++;
+console.log(`\npassed=${passed} failed=0`);</code></pre>
+<p>It worked when the last line is <code>passed=13 failed=0</code>. The daylight-saving cases matter: one conversion pass gets a time typed just before the clocks change an hour wrong.</p>
+<p>If your <code>package.json</code> has no <code>&quot;type&quot;: &quot;module&quot;</code>, rename both files to <code>.mjs</code>.</p>
+<h2 id="4-say-the-zone-on-the-page">4. Say the zone on the page<a class="d-anchor" href="#4-say-the-zone-on-the-page" aria-label="Link to this section">#</a></h2>
+<p>Print the zone wherever a date or a time appears, for example &quot;Times are Sydney time (Australia/Sydney).&quot; A person reading the page can then catch a wrong zone at once, and so can the next person who changes the app.</p>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong><code>toISOString().slice(0, 10)</code> for a date a person sees.</strong> It is the UTC date. Use <code>dateIn</code>.</li><li><strong><code>new Date(&quot;2026-11-05&quot;)</code>.</strong> It is midnight UTC, which in Sydney is 11 in the morning. Keep a chosen date as its string.</li><li><strong>The browser&#39;s zone on the server&#39;s behalf.</strong> A default of &quot;today&quot; filled in by the browser uses the visitor&#39;s zone, which is not always the business&#39;s. Use it only as a starting value, and decide overdue and counts on the server.</li><li><strong>Shared records.</strong> Publish instants as UTC ISO strings ending in <code>Z</code>. A reading app then converts them into its own business&#39;s zone.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/reference/environment">Environment variables</a></li><li><a href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a href="/how-to/share-data">Share data</a></li></ul>
+  <p class="d-meta"><a href="/how-to/dates-and-time-zones.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#the-rule">The rule</a></li><li class="l2"><a href="#1-know-the-businesss-time-zone">1. Know the business&#39;s time zone</a></li><li class="l2"><a href="#2-add-the-date-helpers">2. Add the date helpers</a></li><li class="l2"><a href="#3-test-them">3. Test them</a></li><li class="l2"><a href="#4-say-the-zone-on-the-page">4. Say the zone on the page</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

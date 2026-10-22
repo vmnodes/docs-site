@@ -504,7 +504,7 @@ function check(name, got, want) {
 npm test
 ```
 
-It worked when the last line is `passed=29 failed=0`. To run it against the database as well, give it an empty scratch Postgres database: `TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test`.
+It worked when the last line is `passed=29 failed=0`. To run it against the database as well, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test`.
 
 ## 7. Try it on your computer
 
@@ -580,7 +580,7 @@ The budget holder must already be a member of the org. There is no portal screen
    MINE=$(curl -s http://127.0.0.1:4100/api/requests | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).items.find((r) => r.item === "Monitor").id')
    curl -s -w ' %{http_code}\n' -X POST -H 'content-type: application/json' -d '{"decision":"approve"}' http://127.0.0.1:4100/api/requests/$MINE/decision
    ```
-3. After the launch, `curl -s https://purchase-requests.acme.vmnodes.com/health` prints `"status":"ok"` and `"storage":"postgres"`.
+3. After the launch, `https://purchase-requests.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"status":"ok"` and `"storage":"postgres"`.
 4. On the live app, signed in as the person who launched it (who holds both roles), raise a request. It worked when the row reads "Waiting" with no **Approve** button. Sign in as the budget holder, who holds only `purchasing.approver`: the same row has **Approve** and **Reject**.
 
 ## Traps

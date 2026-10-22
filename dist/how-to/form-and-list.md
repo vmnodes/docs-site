@@ -534,15 +534,11 @@ Run these in order. Items 2 to 5 need `npm run dev` running in another terminal,
    ```
 
    The second command prints `{"error":"role 'visitors.staff' required"}`. The last prints `200`.
-6. After the launch, the live health check answers without sign-in and says where visits are kept:
-
-   ```bash
-   curl -s https://visitor-book.acme.vmnodes.com/health
-   ```
-
-   It prints `"status":"ok"` and `"storage":"postgres"`. `"storage":"memory"` means `"database": true` did not reach the deployed commit.
+6. After the launch, open `https://visitor-book.acme.vmnodes.com/health` in the browser you are signed in with. It says where visits are kept: it shows `"status":"ok"` and `"storage":"postgres"`. `"storage":"memory"` means `"database": true` did not reach the deployed commit.
 
 ## Traps
+
+- **Dates shown in UTC.** The visitor book stores and shows UTC times to stay short. If your list shows dates, decides what is overdue or defaults to "today", follow [Dates and time zones](dates-and-time-zones.md) instead.
 
 - **Hiding the form is not checking the role.** Call `identity.requireRole` on the server for every route that reads or writes, as `server.js` does. A person without the role who sends a request directly gets through otherwise. Check 5 tests it.
 - **The role string must match in three places**: `vmnodes.json`, `server.js` and `dev/mock-portal.js`. A role the code checks but `vmnodes.json` does not declare can never be given to anyone.

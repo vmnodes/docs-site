@@ -6,7 +6,7 @@ Updating an app rebuilds the latest commit on the default branch of the reposito
 
 ## 1. Learn what you were handed
 
-Clone the repository and read four things before you change anything. The portal does not show an app's repository address, so ask whoever launched the app for it.
+Clone the repository and read five things before you change anything. The portal does not show an app's repository address, so ask whoever launched the app for it.
 
 ```bash
 git clone https://github.com/acme/link-list.git
@@ -17,12 +17,13 @@ grep -n 'MIGRATIONS' store.js
 grep -n '"test"' package.json
 ```
 
-It worked when you can answer four questions from the output:
+It worked when you can answer five questions from the output:
 
 - **Which roles does the app have?** The `name` values under `roles`. In the example it is `links.editor`.
 - **Does it keep data in a database?** `"database": true`. In the example it does. If it is missing or `false`, an update clears everything the app holds, so stop and read [Keep data through updates](keep-data-through-updates.md) first.
 - **Which routes check the role?** Every `requireRole` line. The example checks it once, before every route except `/health`.
 - **How do you run its tests?** The `test` script. In the example, `node test/smoke.js`.
+- **How does it change its tables?** Through a `MIGRATIONS` list in `store.js`. In the example it has one. If `grep` prints nothing, the app creates its tables some other way, often with one `create table if not exists`. Before you change what it stores, move that statement unchanged into a `MIGRATIONS` list as its first entry, then add your change as the next entry. [Keep data through updates](keep-data-through-updates.md) shows the list, the lock around it and the test that proves old rows survive.
 
 ## 2. Run the tests before you touch anything
 
@@ -39,8 +40,9 @@ Someone may have pushed a commit that was never put online. Compare what the app
 
 ```bash
 git rev-parse HEAD
-curl -s https://link-list.acme.vmnodes.com/health
 ```
+
+Then open `https://link-list.acme.vmnodes.com/health` in the browser you are signed in with. A plain `curl` of it from your computer gets the gateway's sign-in redirect instead, because every request from outside passes through sign-in; the platform's own check reaches the container directly.
 
 In the portal, open the app's **People** tab and read **Current commit:** in the **Deployment** card.
 
@@ -231,7 +233,7 @@ It worked when `git status -sb` prints a first line that starts `## main` and sa
 
 ## 7. Try it on the data the old version made
 
-Run the old version against a scratch database, add a link, then run the new version against the same database. Use an empty scratch database. `HEAD~1` is the commit before yours.
+Run the old version against a scratch database, add a link, then run the new version against the same database. Use an empty scratch database; [Test with a scratch database](test-with-a-scratch-database.md) starts one safely. `HEAD~1` is the commit before yours.
 
 ```bash
 export DATABASE_URL=postgres://localhost/links_scratch
@@ -293,7 +295,7 @@ Then fix the problem in a new commit and update again. Do not leave the reposito
    ```bash
    curl -s -X POST -H 'content-type: application/json' -d '{"title":"A","url":"https://example.com","category":"Banana"}' http://127.0.0.1:4100/api/links
    ```
-4. After the update, `curl -s https://link-list.acme.vmnodes.com/health` prints `"version":"0.2.0"`, and its `buildCommit` equals the output of `git rev-parse HEAD`.
+4. After the update, `https://link-list.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"version":"0.2.0"`, and its `buildCommit` equals the output of `git rev-parse HEAD`.
 5. On the live app, the links that existed before the update are all listed and all read **General**. Add a link with the category **Forms**: choosing **Forms** in the filter row shows only it.
 
 ## Traps

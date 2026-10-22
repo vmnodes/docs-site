@@ -552,7 +552,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
 npm test
 ```
 
-It worked when the last line is `passed=11 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database: `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=22 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
+It worked when the last line is `passed=11 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=22 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
 
 ## 8. Try it on your computer
 
@@ -568,7 +568,7 @@ It worked when the page is headed **Meeting rooms**, shows **Room**, **Starts (U
 
 Commit, push and launch as `meeting-rooms`, following [Getting started](../getting-started.md) steps 3 to 6. The app name matters: shared records are named after it, so this app shares `meeting-rooms.booking`.
 
-It worked when the badge reads **Working** and `curl -s https://meeting-rooms.acme.vmnodes.com/health` prints `"publishing":true` and `"storage":"postgres"`. The page's last line reads "Bookings are kept in this app's database, across restarts and updates. Sharing: on, as meeting-rooms.booking."
+It worked when the badge reads **Working** and `https://meeting-rooms.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"publishing":true` and `"storage":"postgres"`. The page's last line reads "Bookings are kept in this app's database, across restarts and updates. Sharing: on, as meeting-rooms.booking."
 
 ## 10. Let an administrator switch the fields on
 
@@ -590,16 +590,14 @@ Turning a field on does not fill in records that were published before. This app
    ```bash
    curl -s http://127.0.0.1:3000/health
    ```
-3. After the launch, the live health check prints `"publishing":true` and `"storage":"postgres"`:
-
-   ```bash
-   curl -s https://meeting-rooms.acme.vmnodes.com/health
-   ```
+3. After the launch, `https://meeting-rooms.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"publishing":true` and `"storage":"postgres"`.
 4. On the **Shares** tab there are exactly three rows, `room`, `startsAt` and `endsAt`, and none for `organiserName` or `organiserPhone`.
 5. After the administrator turns the three fields on, each reads **Shared**.
 6. Cancel a booking in the live app. The next publish is a snapshot, so the booking leaves the shared copy. You cannot read the copy back from a portal app yourself, because reading needs your VMnodes contact (see [Read shared data](read-shared-data.md)), so the database run of the test in step 7 is your proof.
 
 ## Traps
+
+- **Times in UTC on the page.** This example types and shows times in UTC to stay short. A real booking form takes the business's local time: see [Dates and time zones](dates-and-time-zones.md). Keep publishing instants as UTC strings ending in `Z`.
 
 - **Three names for one record type.** `vmnodes.json` says `booking/v1`, the API call says `meeting-rooms.booking`, and the **Shares** tab shows `meeting-rooms.booking`. Take the app's name from `VMNODES_APP_NAME`, as `server.js` does, and never type it in. A wrong name is refused with `applications publish only in their own namespace — '<entity>' must start with '<app>.'`.
 - **Declare the entity before you publish it.** An entity that `vmnodes.json` does not list is refused with `publish/not-declared`. The same code appears on a first launch if the app publishes before VMnodes has marked it live, so `server.js` retries at start-up and also publishes after every booking.

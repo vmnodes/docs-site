@@ -72,7 +72,7 @@ It worked when the repository's page on GitHub lists `server.js`, `vmnodes.json`
 3. Under **2. Name it**, type `acme-notes` into **App name**. Use 3 to 30 lowercase letters, digits and hyphens, starting with a letter.
 4. Press **Put it online**.
 
-It worked when you land on a page headed `acme-notes` with a **Starting** badge. The **Build log** section lists the steps as they run: "Waiting to start…", "Creating your application…", "Building your image…", "Checking your image for security issues…" and "Deploying your app…". The page refreshes itself. A launch takes a few minutes.
+It worked when you land on a page headed `acme-notes` with a **Starting** badge. The **Build log** section shows the step it is on, one at a time: "Waiting to start…", "Creating your application…", "Building your image…", "Checking your image for security issues…" and "Deploying your app…". The page refreshes itself. A launch takes a few minutes.
 
 ## 5. Watch the launch
 
@@ -87,9 +87,11 @@ If the page says "Your app is live, but your access to it couldn't be set up. Pr
 
 Press **Open acme-notes**. Your browser is already signed in, so the app opens at `https://acme-notes.acme.vmnodes.com`.
 
+On a new app's first launch, the browser can show a certificate warning such as `ERR_CERT_AUTHORITY_INVALID` for a few minutes after the badge reads **Working**, while the app's https certificate is issued. Wait a few minutes and reload. Never click through the warning.
+
 It worked when the page is headed **Noticeboard**, reads "No notes yet.", shows a **New note** box, and ends "Notes are kept in this app's database, across restarts and updates." Type a note and press **Post note**: the page returns with your note in the list.
 
-Two more addresses on the app show what the app sees. `/health` answers without sign-in, for example `{"status":"ok","app":"acme-notes","version":"0.1.0","buildCommit":"<40 characters>","publishing":true,"storage":"postgres"}`. `/api/me` lists who you are and your roles.
+Two more addresses on the app show what the app sees. `/health` needs no identity from your app, so the platform's check can reach it. Opened in the browser you are signed in with, it shows, for example `{"status":"ok","app":"acme-notes","version":"0.1.0","buildCommit":"<40 characters>","publishing":true,"storage":"postgres"}`. `/api/me` lists who you are and your roles.
 
 ## 7. Take the role off yourself, then put it back
 
@@ -116,7 +118,7 @@ git push
 
 Then in the portal open the app's **People** tab and find the card headed **Deployment**. It shows "Current commit:" and the commit now running. Press **Update to latest commit**.
 
-It worked when the card reads "Updating to" and the new commit, then "Your app is now running the latest commit." Reload the app: the heading reads **Team board** and your notes are still there, because the starter's `vmnodes.json` says `"database": true`. If the update fails, the card reads "The update didn't go online, so your app is still running the previous version." and the old version keeps serving.
+It worked when the card reads "Updating to" and the new commit, then "Your app is now running the latest commit." An update usually goes live within about two minutes. The card can keep reading "Updating to" for a while after the new version is live, so check the app itself: open `/health` in your signed-in browser. When its `buildCommit` is the commit you pushed, the update is live. Reload the app: the heading reads **Team board** and your notes are still there, because the starter's `vmnodes.json` says `"database": true`. If the update fails, the card reads "The update didn't go online, so your app is still running the previous version." and the old version keeps serving.
 
 An update does not give you any role the new commit adds. Give yourself a new role with **Change roles**.
 

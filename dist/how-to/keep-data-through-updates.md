@@ -311,7 +311,7 @@ It worked when the command prints no error and exits 0.
 
 ## 6. Prove the data survives a restart on your computer
 
-`npm run dev` keeps items in memory, because it sets no `DATABASE_URL`. Point it at a Postgres database of your own to test the real path. Use an empty scratch database.
+`npm run dev` keeps items in memory, because it sets no `DATABASE_URL`. Point it at a Postgres database of your own to test the real path. Use an empty scratch database: [Test with a scratch database](test-with-a-scratch-database.md) starts one safely. These steps write `postgres://localhost/<name>` for a server on the default port; with that page's server, use `postgres://app@127.0.0.1:<port>/<name>` and add `-w -h 127.0.0.1 -p <port> -U app` to `createdb`.
 
 ```bash
 createdb stationery_scratch
@@ -588,7 +588,7 @@ A roll back starts the earlier version against the database as it is now. It doe
    ```bash
    curl -s -X POST -H 'content-type: application/json' -d '{"name":"Tape","quantity":3,"reorderLevel":"lots"}' http://127.0.0.1:4100/api/items
    ```
-4. On the live app, before and after step 10, `curl -s https://stationery-stock.acme.vmnodes.com/health` prints `"storage":"postgres"` both times, `"version":"0.1.0"` before and `"version":"0.2.0"` after.
+4. On the live app, before and after step 10, `https://stationery-stock.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"storage":"postgres"` both times, `"version":"0.1.0"` before and `"version":"0.2.0"` after.
 5. On the live app, the items added before the update are listed after it.
 
 ## Traps

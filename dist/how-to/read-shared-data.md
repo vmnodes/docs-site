@@ -96,8 +96,8 @@ const server = http.createServer((req, res) => {
     if (req.headers.authorization !== `Bearer ${TOKEN}`) return reply(401, { error: { code: "auth/unauthorised", message: "a valid API token is required" } });
     const q = JSON.parse(raw);
     seen.push({ method: req.method, url: req.url, q });
-    if (q.entity !== "meeting-rooms.booking") return reply(403, { error: { code: "data/denied", message: `no query access to '${q.entity}'` } });
-    if (q.select.includes("organiserPhone")) return reply(403, { error: { code: "data/field-denied", message: "field 'organiserPhone' is not available to you on 'meeting-rooms.booking'" } });
+    if (q.entity !== "meeting-rooms.booking") return reply(422, { error: { code: "data/denied", message: `no query access to '${q.entity}'` } });
+    if (q.select.includes("organiserPhone")) return reply(422, { error: { code: "data/field-denied", message: "field 'organiserPhone' is not available to you on 'meeting-rooms.booking'" } });
     reply(200, {
       rows: [{ room: "Boardroom", startsAt: "2026-10-22T14:00:00.000Z" }],
       provenance: { entity: q.entity, source: "meeting-rooms", freshestAt: "2026-10-22T09:00:00.000Z", stalestAt: "2026-10-22T09:00:00.000Z" },
@@ -123,7 +123,7 @@ async function run() {
   check("it sends POST /v1/data/query with the entity, fields, order and limit", [seen[0].method, seen[0].url, seen[0].q], ["POST", "/v1/data/query", { entity: "meeting-rooms.booking", select: ["room", "startsAt"], orderBy: { field: "startsAt", dir: "asc" }, limit: 20 }]);
 
   check("a wrong token -> 401 with the platform's message", await refusal({ ...ok, token: "nope" }), { status: 401, code: "auth/unauthorised", message: "a valid API token is required" });
-  check("an entity with no grant -> its message, unchanged", await refusal({ ...ok, entity: "crm.note" }), { status: 403, code: "data/denied", message: "no query access to 'crm.note'" });
+  check("an entity with no grant -> its message, unchanged", await refusal({ ...ok, entity: "crm.note" }), { status: 422, code: "data/denied", message: "no query access to 'crm.note'" });
   check("a field that is not shared with the reader -> its message", (await refusal({ ...ok, select: ["room", "organiserPhone"] })).code, "data/field-denied");
   const before = seen.length;
   const noToken = await refusal({ ...ok, token: undefined });

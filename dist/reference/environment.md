@@ -37,7 +37,7 @@ If `DATABASE_URL` is set, your app's container can reach that database. It canno
 ## Not set
 
 - `PORT`. Your app must listen on port 3000, on all addresses (`0.0.0.0`). Read `process.env.PORT` only as a local-testing override with 3000 as the fallback.
-- `NODE_ENV`, `HOST`, and every other variable not listed above. Set what you need in your `Dockerfile` with `ENV`.
+- `NODE_ENV`, `HOST`, `TZ`, and every other variable not listed above. Set what you need in your `Dockerfile` with `ENV`; the portal has no place to set a variable. The server's clock is UTC: for a business's own time zone see [Dates and time zones](../how-to/dates-and-time-zones.md).
 
 An app must not depend on any variable that is not on this page. Others may exist for the platform's own use and can change.
 

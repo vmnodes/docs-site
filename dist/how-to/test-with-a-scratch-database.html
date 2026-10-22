@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test with a scratch database · VMnodes docs</title>
+<meta name="description" content="Run your app&#39;s database tests on your own computer, against a private Postgres that you start, use and stop yourself. Read this before the first launch of any app with &quot;database&quot;: true, and before every update that changes what the app stores.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/test-with-a-scratch-database.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li><li><a class="vm-tap" href="/how-to/dates-and-time-zones">Dates and time zones</a></li><li><a class="vm-tap" href="/how-to/test-with-a-scratch-database" aria-current="page">Test with a scratch database</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="test-with-a-scratch-database">Test with a scratch database</h1>
+<p>Run your app&#39;s database tests on your own computer, against a private Postgres that you start, use and stop yourself. Read this before the first launch of any app with <code>&quot;database&quot;: true</code>, and before every update that changes what the app stores.</p>
+<p>The platform gives your app a real database only online. Without a local one, <code>npm test</code> skips its database checks. The starter, for example, ends with <code>SKIP postgres section</code> and <code>passed=40 failed=0</code>. Your SQL would then run for the first time on the customer&#39;s data.</p>
+<h2 id="what-you-need">What you need<a class="d-anchor" href="#what-you-need" aria-label="Link to this section">#</a></h2>
+<ul><li>The PostgreSQL programs <code>initdb</code>, <code>pg_ctl</code>, <code>createdb</code> and <code>pg_isready</code>, version 14 or later. Check with <code>initdb --version</code>. On a Mac with Homebrew they come from <code>brew install postgresql@16</code>.</li><li>A folder outside your repository for the database&#39;s files. These steps use <code>../scratch-db</code>, next to the repository, so nothing is committed by accident.</li></ul>
+<p>If you cannot install PostgreSQL, say so in your report. Then launch with extra care: open the app&#39;s <code>/health</code> after the first launch and after every update, and confirm the data you added is still there.</p>
+<h2 id="1-pick-a-port-nobody-is-using">1. Pick a port nobody is using<a class="d-anchor" href="#1-pick-a-port-nobody-is-using" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>PGPORT_SCRATCH=55432
+pg_isready -h 127.0.0.1 -p $PGPORT_SCRATCH</code></pre>
+<p>It worked when this prints <code>127.0.0.1:55432 - no response</code>. If it prints <code>accepting connections</code>, something else is already listening there. It is not yours: never connect to it, never send it a password, and never stop it. Pick another number between 49152 and 65535 and check again.</p>
+<h2 id="2-create-and-start-your-own-postgres">2. Create and start your own Postgres<a class="d-anchor" href="#2-create-and-start-your-own-postgres" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>initdb -D ../scratch-db -U app --auth=trust
+pg_ctl -D ../scratch-db -l ../scratch-db/server.log -w \
+  -o &quot;-p $PGPORT_SCRATCH -c listen_addresses=127.0.0.1 -c unix_socket_directories=&#39;&#39;&quot; start</code></pre>
+<p>It worked when the last line is <code>server started</code>.</p>
+<ul><li><code>--auth=trust</code> means no password: the server only listens on <code>127.0.0.1</code>, so nobody else can reach it.</li><li><code>unix_socket_directories=&#39;&#39;</code> turns off the local socket file. Postgres refuses to start when that file&#39;s full path is longer than 103 characters, which a deep project folder easily reaches. The log then reads <code>is too long (maximum 103 bytes)</code>. These steps use TCP only, so the folder&#39;s depth does not matter.</li></ul>
+<h2 id="3-make-an-empty-database-and-run-the-tests">3. Make an empty database and run the tests<a class="d-anchor" href="#3-make-an-empty-database-and-run-the-tests" aria-label="Link to this section">#</a></h2>
+<p>The tests expect an EMPTY database. Drop and recreate it before every run, so nothing left over from an earlier run or an earlier version decides the result:</p>
+<pre data-lang="bash"><code>dropdb -w --if-exists -h 127.0.0.1 -p $PGPORT_SCRATCH -U app scratch
+createdb -w -h 127.0.0.1 -p $PGPORT_SCRATCH -U app scratch
+TEST_DATABASE_URL=postgres://app@127.0.0.1:$PGPORT_SCRATCH/scratch npm test</code></pre>
+<p>It worked when there is no <code>SKIP postgres</code> line and the last line reads <code>failed=0</code>. For the starter it reads <code>passed=47 failed=0</code>.</p>
+<p><code>-w</code> means never ask for a password. Without it, a <code>createdb</code> that reaches the wrong server waits forever at a password prompt.</p>
+<h2 id="4-stop-it">4. Stop it<a class="d-anchor" href="#4-stop-it" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>pg_ctl -D ../scratch-db -m fast -w stop</code></pre>
+<p>It worked when the last line is <code>server stopped</code>. Stop only the server you started, by its folder. Never stop a Postgres by its name, its port or a process search: on a shared computer it may be somebody else&#39;s. Delete <code>../scratch-db</code> when you no longer need it.</p>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>A <code>TEST_DATABASE_URL</code> that already has your tables</strong>, for example because you started the app itself against it. The starter&#39;s test removes what it creates, but a table it did not create makes it refuse: <code>FAIL TEST_DATABASE_URL already has a notes table; use an empty scratch database</code>. Recreate the database (step 3).</li><li><strong>Testing an upgrade.</strong> To prove an update keeps the existing data, first load the OLD version&#39;s tables and rows, then run the new version&#39;s start-up against them. <a href="/how-to/keep-data-through-updates">Keep data through updates</a> shows how, with <code>test/migrate.js</code>.</li><li><strong>Pointing the tests at the app&#39;s real <code>DATABASE_URL</code>.</strong> The platform&#39;s database is reachable only from inside your app&#39;s container, and the tests would write to the customer&#39;s data. Use a scratch database only.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a href="/how-to/change-an-app">Change an app</a></li><li><a href="/concepts/data">Data</a></li><li><a href="/getting-started">Getting started</a></li></ul>
+  <p class="d-meta"><a href="/how-to/test-with-a-scratch-database.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#what-you-need">What you need</a></li><li class="l2"><a href="#1-pick-a-port-nobody-is-using">1. Pick a port nobody is using</a></li><li class="l2"><a href="#2-create-and-start-your-own-postgres">2. Create and start your own Postgres</a></li><li class="l2"><a href="#3-make-an-empty-database-and-run-the-tests">3. Make an empty database and run the tests</a></li><li class="l2"><a href="#4-stop-it">4. Stop it</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

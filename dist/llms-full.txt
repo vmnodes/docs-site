@@ -28,9 +28,11 @@ Read the other concept pages when a task touches them: [orgs and people](concept
 | Build an app where people fill in a form and see a list | [Build a form-and-list app](how-to/form-and-list.md) |
 | One person submits, another approves | [Submit and approve](how-to/approvals.md) |
 | Keep data when the app is updated | [Keep data through updates](how-to/keep-data-through-updates.md) |
-| Share your app's records with other apps in the org | [Share data](how-to/share-data.md) |
+| Share your app's records with other apps in the org, keeping some fields private | [Share data](how-to/share-data.md) |
 | Read records another app shares | [Read shared data](how-to/read-shared-data.md) |
 | Change an app someone else built | [Change an app](how-to/change-an-app.md) |
+| Show dates, "today", overdue or this week in the business's time zone | [Dates and time zones](how-to/dates-and-time-zones.md) |
+| Run the database tests on your own computer | [Test with a scratch database](how-to/test-with-a-scratch-database.md) |
 
 When something fails, search [Troubleshooting](troubleshooting.md) for the exact message you saw. Facts you may need while building are in the reference pages: [environment variables](reference/environment.md), [build and run](reference/build-and-run.md), [the identity package](reference/identity-sdk.md), [the publish API](reference/publish-api.md) and [limits](reference/limits.md).
 
@@ -142,7 +144,7 @@ It worked when the repository's page on GitHub lists `server.js`, `vmnodes.json`
 3. Under **2. Name it**, type `acme-notes` into **App name**. Use 3 to 30 lowercase letters, digits and hyphens, starting with a letter.
 4. Press **Put it online**.
 
-It worked when you land on a page headed `acme-notes` with a **Starting** badge. The **Build log** section lists the steps as they run: "Waiting to start…", "Creating your application…", "Building your image…", "Checking your image for security issues…" and "Deploying your app…". The page refreshes itself. A launch takes a few minutes.
+It worked when you land on a page headed `acme-notes` with a **Starting** badge. The **Build log** section shows the step it is on, one at a time: "Waiting to start…", "Creating your application…", "Building your image…", "Checking your image for security issues…" and "Deploying your app…". The page refreshes itself. A launch takes a few minutes.
 
 ## 5. Watch the launch
 
@@ -157,9 +159,11 @@ If the page says "Your app is live, but your access to it couldn't be set up. Pr
 
 Press **Open acme-notes**. Your browser is already signed in, so the app opens at `https://acme-notes.acme.vmnodes.com`.
 
+On a new app's first launch, the browser can show a certificate warning such as `ERR_CERT_AUTHORITY_INVALID` for a few minutes after the badge reads **Working**, while the app's https certificate is issued. Wait a few minutes and reload. Never click through the warning.
+
 It worked when the page is headed **Noticeboard**, reads "No notes yet.", shows a **New note** box, and ends "Notes are kept in this app's database, across restarts and updates." Type a note and press **Post note**: the page returns with your note in the list.
 
-Two more addresses on the app show what the app sees. `/health` answers without sign-in, for example `{"status":"ok","app":"acme-notes","version":"0.1.0","buildCommit":"<40 characters>","publishing":true,"storage":"postgres"}`. `/api/me` lists who you are and your roles.
+Two more addresses on the app show what the app sees. `/health` needs no identity from your app, so the platform's check can reach it. Opened in the browser you are signed in with, it shows, for example `{"status":"ok","app":"acme-notes","version":"0.1.0","buildCommit":"<40 characters>","publishing":true,"storage":"postgres"}`. `/api/me` lists who you are and your roles.
 
 ## 7. Take the role off yourself, then put it back
 
@@ -186,7 +190,7 @@ git push
 
 Then in the portal open the app's **People** tab and find the card headed **Deployment**. It shows "Current commit:" and the commit now running. Press **Update to latest commit**.
 
-It worked when the card reads "Updating to" and the new commit, then "Your app is now running the latest commit." Reload the app: the heading reads **Team board** and your notes are still there, because the starter's `vmnodes.json` says `"database": true`. If the update fails, the card reads "The update didn't go online, so your app is still running the previous version." and the old version keeps serving.
+It worked when the card reads "Updating to" and the new commit, then "Your app is now running the latest commit." An update usually goes live within about two minutes. The card can keep reading "Updating to" for a while after the new version is live, so check the app itself: open `/health` in your signed-in browser. When its `buildCommit` is the commit you pushed, the update is live. Reload the app: the heading reads **Team board** and your notes are still there, because the starter's `vmnodes.json` says `"database": true`. If the update fails, the card reads "The update didn't go online, so your app is still running the previous version." and the old version keeps serving.
 
 An update does not give you any role the new commit adds. Give yourself a new role with **Change roles**.
 
@@ -741,15 +745,11 @@ Run these in order. Items 2 to 5 need `npm run dev` running in another terminal,
    ```
 
    The second command prints `{"error":"role 'visitors.staff' required"}`. The last prints `200`.
-6. After the launch, the live health check answers without sign-in and says where visits are kept:
-
-   ```bash
-   curl -s https://visitor-book.acme.vmnodes.com/health
-   ```
-
-   It prints `"status":"ok"` and `"storage":"postgres"`. `"storage":"memory"` means `"database": true` did not reach the deployed commit.
+6. After the launch, open `https://visitor-book.acme.vmnodes.com/health` in the browser you are signed in with. It says where visits are kept: it shows `"status":"ok"` and `"storage":"postgres"`. `"storage":"memory"` means `"database": true` did not reach the deployed commit.
 
 ## Traps
+
+- **Dates shown in UTC.** The visitor book stores and shows UTC times to stay short. If your list shows dates, decides what is overdue or defaults to "today", follow [Dates and time zones](dates-and-time-zones.md) instead.
 
 - **Hiding the form is not checking the role.** Call `identity.requireRole` on the server for every route that reads or writes, as `server.js` does. A person without the role who sends a request directly gets through otherwise. Check 5 tests it.
 - **The role string must match in three places**: `vmnodes.json`, `server.js` and `dev/mock-portal.js`. A role the code checks but `vmnodes.json` does not declare can never be given to anyone.
@@ -1278,7 +1278,7 @@ function check(name, got, want) {
 npm test
 ```
 
-It worked when the last line is `passed=29 failed=0`. To run it against the database as well, give it an empty scratch Postgres database: `TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test`.
+It worked when the last line is `passed=29 failed=0`. To run it against the database as well, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test`.
 
 ## 7. Try it on your computer
 
@@ -1354,7 +1354,7 @@ The budget holder must already be a member of the org. There is no portal screen
    MINE=$(curl -s http://127.0.0.1:4100/api/requests | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).items.find((r) => r.item === "Monitor").id')
    curl -s -w ' %{http_code}\n' -X POST -H 'content-type: application/json' -d '{"decision":"approve"}' http://127.0.0.1:4100/api/requests/$MINE/decision
    ```
-3. After the launch, `curl -s https://purchase-requests.acme.vmnodes.com/health` prints `"status":"ok"` and `"storage":"postgres"`.
+3. After the launch, `https://purchase-requests.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"status":"ok"` and `"storage":"postgres"`.
 4. On the live app, signed in as the person who launched it (who holds both roles), raise a request. It worked when the row reads "Waiting" with no **Approve** button. Sign in as the budget holder, who holds only `purchasing.approver`: the same row has **Approve** and **Reject**.
 
 ## Traps
@@ -1694,7 +1694,7 @@ It worked when the command prints no error and exits 0.
 
 ## 6. Prove the data survives a restart on your computer
 
-`npm run dev` keeps items in memory, because it sets no `DATABASE_URL`. Point it at a Postgres database of your own to test the real path. Use an empty scratch database.
+`npm run dev` keeps items in memory, because it sets no `DATABASE_URL`. Point it at a Postgres database of your own to test the real path. Use an empty scratch database: [Test with a scratch database](test-with-a-scratch-database.md) starts one safely. These steps write `postgres://localhost/<name>` for a server on the default port; with that page's server, use `postgres://app@127.0.0.1:<port>/<name>` and add `-w -h 127.0.0.1 -p <port> -U app` to `createdb`.
 
 ```bash
 createdb stationery_scratch
@@ -1971,7 +1971,7 @@ A roll back starts the earlier version against the database as it is now. It doe
    ```bash
    curl -s -X POST -H 'content-type: application/json' -d '{"name":"Tape","quantity":3,"reorderLevel":"lots"}' http://127.0.0.1:4100/api/items
    ```
-4. On the live app, before and after step 10, `curl -s https://stationery-stock.acme.vmnodes.com/health` prints `"storage":"postgres"` both times, `"version":"0.1.0"` before and `"version":"0.2.0"` after.
+4. On the live app, before and after step 10, `https://stationery-stock.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"storage":"postgres"` both times, `"version":"0.1.0"` before and `"version":"0.2.0"` after.
 5. On the live app, the items added before the update are listed after it.
 
 ## Traps
@@ -2552,7 +2552,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
 npm test
 ```
 
-It worked when the last line is `passed=11 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database: `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=22 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
+It worked when the last line is `passed=11 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=22 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
 
 ## 8. Try it on your computer
 
@@ -2568,7 +2568,7 @@ It worked when the page is headed **Meeting rooms**, shows **Room**, **Starts (U
 
 Commit, push and launch as `meeting-rooms`, following [Getting started](../getting-started.md) steps 3 to 6. The app name matters: shared records are named after it, so this app shares `meeting-rooms.booking`.
 
-It worked when the badge reads **Working** and `curl -s https://meeting-rooms.acme.vmnodes.com/health` prints `"publishing":true` and `"storage":"postgres"`. The page's last line reads "Bookings are kept in this app's database, across restarts and updates. Sharing: on, as meeting-rooms.booking."
+It worked when the badge reads **Working** and `https://meeting-rooms.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"publishing":true` and `"storage":"postgres"`. The page's last line reads "Bookings are kept in this app's database, across restarts and updates. Sharing: on, as meeting-rooms.booking."
 
 ## 10. Let an administrator switch the fields on
 
@@ -2590,16 +2590,14 @@ Turning a field on does not fill in records that were published before. This app
    ```bash
    curl -s http://127.0.0.1:3000/health
    ```
-3. After the launch, the live health check prints `"publishing":true` and `"storage":"postgres"`:
-
-   ```bash
-   curl -s https://meeting-rooms.acme.vmnodes.com/health
-   ```
+3. After the launch, `https://meeting-rooms.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"publishing":true` and `"storage":"postgres"`.
 4. On the **Shares** tab there are exactly three rows, `room`, `startsAt` and `endsAt`, and none for `organiserName` or `organiserPhone`.
 5. After the administrator turns the three fields on, each reads **Shared**.
 6. Cancel a booking in the live app. The next publish is a snapshot, so the booking leaves the shared copy. You cannot read the copy back from a portal app yourself, because reading needs your VMnodes contact (see [Read shared data](read-shared-data.md)), so the database run of the test in step 7 is your proof.
 
 ## Traps
+
+- **Times in UTC on the page.** This example types and shows times in UTC to stay short. A real booking form takes the business's local time: see [Dates and time zones](dates-and-time-zones.md). Keep publishing instants as UTC strings ending in `Z`.
 
 - **Three names for one record type.** `vmnodes.json` says `booking/v1`, the API call says `meeting-rooms.booking`, and the **Shares** tab shows `meeting-rooms.booking`. Take the app's name from `VMNODES_APP_NAME`, as `server.js` does, and never type it in. A wrong name is refused with `applications publish only in their own namespace — '<entity>' must start with '<app>.'`.
 - **Declare the entity before you publish it.** An entity that `vmnodes.json` does not list is refused with `publish/not-declared`. The same code appears on a first launch if the app publishes before VMnodes has marked it live, so `server.js` retries at start-up and also publishes after every booking.
@@ -2723,8 +2721,8 @@ const server = http.createServer((req, res) => {
     if (req.headers.authorization !== `Bearer ${TOKEN}`) return reply(401, { error: { code: "auth/unauthorised", message: "a valid API token is required" } });
     const q = JSON.parse(raw);
     seen.push({ method: req.method, url: req.url, q });
-    if (q.entity !== "meeting-rooms.booking") return reply(403, { error: { code: "data/denied", message: `no query access to '${q.entity}'` } });
-    if (q.select.includes("organiserPhone")) return reply(403, { error: { code: "data/field-denied", message: "field 'organiserPhone' is not available to you on 'meeting-rooms.booking'" } });
+    if (q.entity !== "meeting-rooms.booking") return reply(422, { error: { code: "data/denied", message: `no query access to '${q.entity}'` } });
+    if (q.select.includes("organiserPhone")) return reply(422, { error: { code: "data/field-denied", message: "field 'organiserPhone' is not available to you on 'meeting-rooms.booking'" } });
     reply(200, {
       rows: [{ room: "Boardroom", startsAt: "2026-10-22T14:00:00.000Z" }],
       provenance: { entity: q.entity, source: "meeting-rooms", freshestAt: "2026-10-22T09:00:00.000Z", stalestAt: "2026-10-22T09:00:00.000Z" },
@@ -2750,7 +2748,7 @@ async function run() {
   check("it sends POST /v1/data/query with the entity, fields, order and limit", [seen[0].method, seen[0].url, seen[0].q], ["POST", "/v1/data/query", { entity: "meeting-rooms.booking", select: ["room", "startsAt"], orderBy: { field: "startsAt", dir: "asc" }, limit: 20 }]);
 
   check("a wrong token -> 401 with the platform's message", await refusal({ ...ok, token: "nope" }), { status: 401, code: "auth/unauthorised", message: "a valid API token is required" });
-  check("an entity with no grant -> its message, unchanged", await refusal({ ...ok, entity: "crm.note" }), { status: 403, code: "data/denied", message: "no query access to 'crm.note'" });
+  check("an entity with no grant -> its message, unchanged", await refusal({ ...ok, entity: "crm.note" }), { status: 422, code: "data/denied", message: "no query access to 'crm.note'" });
   check("a field that is not shared with the reader -> its message", (await refusal({ ...ok, select: ["room", "organiserPhone"] })).code, "data/field-denied");
   const before = seen.length;
   const noToken = await refusal({ ...ok, token: undefined });
@@ -2858,7 +2856,7 @@ Updating an app rebuilds the latest commit on the default branch of the reposito
 
 ## 1. Learn what you were handed
 
-Clone the repository and read four things before you change anything. The portal does not show an app's repository address, so ask whoever launched the app for it.
+Clone the repository and read five things before you change anything. The portal does not show an app's repository address, so ask whoever launched the app for it.
 
 ```bash
 git clone https://github.com/acme/link-list.git
@@ -2869,12 +2867,13 @@ grep -n 'MIGRATIONS' store.js
 grep -n '"test"' package.json
 ```
 
-It worked when you can answer four questions from the output:
+It worked when you can answer five questions from the output:
 
 - **Which roles does the app have?** The `name` values under `roles`. In the example it is `links.editor`.
 - **Does it keep data in a database?** `"database": true`. In the example it does. If it is missing or `false`, an update clears everything the app holds, so stop and read [Keep data through updates](keep-data-through-updates.md) first.
 - **Which routes check the role?** Every `requireRole` line. The example checks it once, before every route except `/health`.
 - **How do you run its tests?** The `test` script. In the example, `node test/smoke.js`.
+- **How does it change its tables?** Through a `MIGRATIONS` list in `store.js`. In the example it has one. If `grep` prints nothing, the app creates its tables some other way, often with one `create table if not exists`. Before you change what it stores, move that statement unchanged into a `MIGRATIONS` list as its first entry, then add your change as the next entry. [Keep data through updates](keep-data-through-updates.md) shows the list, the lock around it and the test that proves old rows survive.
 
 ## 2. Run the tests before you touch anything
 
@@ -2891,8 +2890,9 @@ Someone may have pushed a commit that was never put online. Compare what the app
 
 ```bash
 git rev-parse HEAD
-curl -s https://link-list.acme.vmnodes.com/health
 ```
+
+Then open `https://link-list.acme.vmnodes.com/health` in the browser you are signed in with. A plain `curl` of it from your computer gets the gateway's sign-in redirect instead, because every request from outside passes through sign-in; the platform's own check reaches the container directly.
 
 In the portal, open the app's **People** tab and read **Current commit:** in the **Deployment** card.
 
@@ -3083,7 +3083,7 @@ It worked when `git status -sb` prints a first line that starts `## main` and sa
 
 ## 7. Try it on the data the old version made
 
-Run the old version against a scratch database, add a link, then run the new version against the same database. Use an empty scratch database. `HEAD~1` is the commit before yours.
+Run the old version against a scratch database, add a link, then run the new version against the same database. Use an empty scratch database; [Test with a scratch database](test-with-a-scratch-database.md) starts one safely. `HEAD~1` is the commit before yours.
 
 ```bash
 export DATABASE_URL=postgres://localhost/links_scratch
@@ -3145,7 +3145,7 @@ Then fix the problem in a new commit and update again. Do not leave the reposito
    ```bash
    curl -s -X POST -H 'content-type: application/json' -d '{"title":"A","url":"https://example.com","category":"Banana"}' http://127.0.0.1:4100/api/links
    ```
-4. After the update, `curl -s https://link-list.acme.vmnodes.com/health` prints `"version":"0.2.0"`, and its `buildCommit` equals the output of `git rev-parse HEAD`.
+4. After the update, `https://link-list.acme.vmnodes.com/health`, opened in the browser you are signed in with, shows `"version":"0.2.0"`, and its `buildCommit` equals the output of `git rev-parse HEAD`.
 5. On the live app, the links that existed before the update are all listed and all read **General**. Add a link with the category **Forms**: choosing **Forms** in the filter row shows only it.
 
 ## Traps
@@ -3168,6 +3168,207 @@ Then fix the problem in a new commit and update again. Do not leave the reposito
 - [Keep data through updates](keep-data-through-updates.md)
 - [Roles](../concepts/roles.md)
 - [Troubleshooting](../troubleshooting.md)
+
+---
+
+<!-- source: https://docs.vmnodes.com/how-to/dates-and-time-zones.md -->
+
+# Dates and time zones
+
+Show "today", due dates, weeks and booking times in the business's own time zone, not the server's. Read this before you build anything that shows a date, decides what is overdue, counts by day or week, or takes a time from a form.
+
+## The rule
+
+Your app's server runs in UTC. The platform sets no time-zone variable, and the official Node images default to UTC. So `new Date()`, `toISOString()` and a date taken with `.slice(0, 10)` are all UTC.
+
+For a business in Sydney, 9:30 in the morning on 23 October is still 22 October in UTC. An app that uses UTC dates shows that morning's returns as returned "yesterday", calls a loan due today overdue, and counts early-morning bookings on the wrong day.
+
+Keep two kinds of value apart:
+
+| Value | Example | Store it as | Show it |
+|---|---|---|---|
+| An instant: when something happened or is booked | returned at, starts at | a UTC timestamp (`timestamptz`, or an ISO string ending in `Z`) | converted to the business's zone with `dateIn` |
+| A calendar date a person chose | due back on, date it came in | the date string `YYYY-MM-DD`, with no time | as it is |
+
+Decide "today", "overdue" and "this week" in the business's zone. Never decide them from the server's clock alone.
+
+## 1. Know the business's time zone
+
+Ask the customer which city they work in, and use its IANA name, such as `Australia/Sydney` or `Europe/London`. If nobody can answer, choose one, write the question in your report, and print the zone on the page (step 4), so a wrong guess is visible.
+
+Set it in your `Dockerfile`. The portal has no place to set a variable:
+
+```dockerfile
+ENV APP_TIME_ZONE=Australia/Sydney
+```
+
+It worked when the app's page names that zone (step 4).
+
+## 2. Add the date helpers
+
+Save this as `dates.js`. It needs nothing beyond Node: the zone rules come with Node's built-in `Intl`.
+
+```js
+// Calendar dates and wall-clock times in the business's time zone. The server's clock is UTC.
+export const TIME_ZONE = process.env.APP_TIME_ZONE || "Australia/Sydney";
+
+const parts = (instant, timeZone) => Object.fromEntries(
+  new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(instant).map((p) => [p.type, p.value]));
+
+/** The calendar date, "YYYY-MM-DD", that `instant` falls on in `timeZone`. */
+export function dateIn(instant, timeZone = TIME_ZONE) {
+  const p = parts(new Date(instant), timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+/** Today's date in `timeZone`. */
+export const todayIn = (timeZone = TIME_ZONE, now = new Date()) => dateIn(now, timeZone);
+
+/** The Monday that starts the calendar week holding `date` ("YYYY-MM-DD"). */
+export function mondayOf(date) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** A wall-clock time typed in `timeZone` ("YYYY-MM-DDTHH:MM", as <input type="datetime-local"> sends it), as a UTC instant. */
+export function wallTimeToInstant(local, timeZone = TIME_ZONE) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) throw new Error(`expected YYYY-MM-DDTHH:MM, got ${local}`);
+  const asUtc = new Date(`${local}:00Z`).getTime();
+  const offsetAt = (t) => { const p = parts(new Date(t), timeZone); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - t; };
+  const first = asUtc - offsetAt(asUtc);
+  return new Date(asUtc - offsetAt(first)); // a second pass settles times near a daylight-saving change
+}
+```
+
+How to use it:
+
+- **"Today" and "overdue".** `const today = todayIn()`. A loan is overdue when `dueOn < today`. Compare as strings: `YYYY-MM-DD` sorts in date order. A loan due today is not overdue.
+- **The date an instant falls on.** `dateIn(returnedAt)`, never `returnedAt.slice(0, 10)`.
+- **This week.** A booking is in the calendar week starting Monday when `mondayOf(dateIn(b.startsAt)) === mondayOf(todayIn())`. Say on the page which week you mean.
+- **A time typed into a form.** `<input type="datetime-local">` sends a wall-clock time with no zone, such as `2026-11-05T10:30`. Store `wallTimeToInstant(value).toISOString()`. To fill the input back in, show the instant in the business's zone.
+
+## 3. Test them
+
+Save this as `test/dates.js` and run `node test/dates.js`.
+
+```js
+import assert from "node:assert/strict";
+import { dateIn, todayIn, mondayOf, wallTimeToInstant } from "../dates.js";
+let passed = 0;
+const check = (name, got, want) => { assert.deepEqual(got, want, name); passed++; console.log(`ok   ${name}`); };
+// 13:30 UTC on 22 Oct is already 23 Oct in Sydney (UTC+11 in October): the bug the UTC date causes.
+check("an instant's Sydney date, not its UTC date", dateIn("2026-10-22T13:30:00Z", "Australia/Sydney"), "2026-10-23");
+check("the same instant's UTC date", dateIn("2026-10-22T13:30:00Z", "UTC"), "2026-10-22");
+check("today in a zone", todayIn("Australia/Sydney", new Date("2026-10-22T22:00:00Z")), "2026-10-23");
+check("Monday of a Thursday", mondayOf("2026-10-22"), "2026-10-19");
+check("Monday of a Sunday is the Monday before", mondayOf("2026-10-25"), "2026-10-19");
+check("Monday of a Monday is itself", mondayOf("2026-10-19"), "2026-10-19");
+check("10:30 Sydney in November is 23:30 UTC the day before", wallTimeToInstant("2026-11-05T10:30", "Australia/Sydney").toISOString(), "2026-11-04T23:30:00.000Z");
+check("10:30 Sydney in June (no daylight saving) is 00:30 UTC", wallTimeToInstant("2026-06-05T10:30", "Australia/Sydney").toISOString(), "2026-06-05T00:30:00.000Z");
+check("the day daylight saving starts, after the change", wallTimeToInstant("2026-10-04T03:30", "Australia/Sydney").toISOString(), "2026-10-03T16:30:00.000Z");
+check("the day daylight saving starts, BEFORE the change (one pass gets this an hour out)", wallTimeToInstant("2026-10-04T01:30", "Australia/Sydney").toISOString(), "2026-10-03T15:30:00.000Z");
+check("New York in July", wallTimeToInstant("2026-07-01T09:00", "America/New_York").toISOString(), "2026-07-01T13:00:00.000Z");
+check("a round trip gives the typed date back", dateIn(wallTimeToInstant("2026-11-05T00:15", "Australia/Sydney"), "Australia/Sydney"), "2026-11-05");
+assert.throws(() => wallTimeToInstant("5 Nov 10:30"), /expected YYYY-MM-DDTHH:MM/); passed++;
+console.log(`\npassed=${passed} failed=0`);
+```
+
+It worked when the last line is `passed=13 failed=0`. The daylight-saving cases matter: one conversion pass gets a time typed just before the clocks change an hour wrong.
+
+If your `package.json` has no `"type": "module"`, rename both files to `.mjs`.
+
+## 4. Say the zone on the page
+
+Print the zone wherever a date or a time appears, for example "Times are Sydney time (Australia/Sydney)." A person reading the page can then catch a wrong zone at once, and so can the next person who changes the app.
+
+## Traps
+
+- **`toISOString().slice(0, 10)` for a date a person sees.** It is the UTC date. Use `dateIn`.
+- **`new Date("2026-11-05")`.** It is midnight UTC, which in Sydney is 11 in the morning. Keep a chosen date as its string.
+- **The browser's zone on the server's behalf.** A default of "today" filled in by the browser uses the visitor's zone, which is not always the business's. Use it only as a starting value, and decide overdue and counts on the server.
+- **Shared records.** Publish instants as UTC ISO strings ending in `Z`. A reading app then converts them into its own business's zone.
+
+## Related
+
+- [Environment variables](../reference/environment.md)
+- [Build a form-and-list app](form-and-list.md)
+- [Share data](share-data.md)
+
+---
+
+<!-- source: https://docs.vmnodes.com/how-to/test-with-a-scratch-database.md -->
+
+# Test with a scratch database
+
+Run your app's database tests on your own computer, against a private Postgres that you start, use and stop yourself. Read this before the first launch of any app with `"database": true`, and before every update that changes what the app stores.
+
+The platform gives your app a real database only online. Without a local one, `npm test` skips its database checks. The starter, for example, ends with `SKIP postgres section` and `passed=40 failed=0`. Your SQL would then run for the first time on the customer's data.
+
+## What you need
+
+- The PostgreSQL programs `initdb`, `pg_ctl`, `createdb` and `pg_isready`, version 14 or later. Check with `initdb --version`. On a Mac with Homebrew they come from `brew install postgresql@16`.
+- A folder outside your repository for the database's files. These steps use `../scratch-db`, next to the repository, so nothing is committed by accident.
+
+If you cannot install PostgreSQL, say so in your report. Then launch with extra care: open the app's `/health` after the first launch and after every update, and confirm the data you added is still there.
+
+## 1. Pick a port nobody is using
+
+```bash
+PGPORT_SCRATCH=55432
+pg_isready -h 127.0.0.1 -p $PGPORT_SCRATCH
+```
+
+It worked when this prints `127.0.0.1:55432 - no response`. If it prints `accepting connections`, something else is already listening there. It is not yours: never connect to it, never send it a password, and never stop it. Pick another number between 49152 and 65535 and check again.
+
+## 2. Create and start your own Postgres
+
+```bash
+initdb -D ../scratch-db -U app --auth=trust
+pg_ctl -D ../scratch-db -l ../scratch-db/server.log -w \
+  -o "-p $PGPORT_SCRATCH -c listen_addresses=127.0.0.1 -c unix_socket_directories=''" start
+```
+
+It worked when the last line is `server started`.
+
+- `--auth=trust` means no password: the server only listens on `127.0.0.1`, so nobody else can reach it.
+- `unix_socket_directories=''` turns off the local socket file. Postgres refuses to start when that file's full path is longer than 103 characters, which a deep project folder easily reaches. The log then reads `is too long (maximum 103 bytes)`. These steps use TCP only, so the folder's depth does not matter.
+
+## 3. Make an empty database and run the tests
+
+The tests expect an EMPTY database. Drop and recreate it before every run, so nothing left over from an earlier run or an earlier version decides the result:
+
+```bash
+dropdb -w --if-exists -h 127.0.0.1 -p $PGPORT_SCRATCH -U app scratch
+createdb -w -h 127.0.0.1 -p $PGPORT_SCRATCH -U app scratch
+TEST_DATABASE_URL=postgres://app@127.0.0.1:$PGPORT_SCRATCH/scratch npm test
+```
+
+It worked when there is no `SKIP postgres` line and the last line reads `failed=0`. For the starter it reads `passed=47 failed=0`.
+
+`-w` means never ask for a password. Without it, a `createdb` that reaches the wrong server waits forever at a password prompt.
+
+## 4. Stop it
+
+```bash
+pg_ctl -D ../scratch-db -m fast -w stop
+```
+
+It worked when the last line is `server stopped`. Stop only the server you started, by its folder. Never stop a Postgres by its name, its port or a process search: on a shared computer it may be somebody else's. Delete `../scratch-db` when you no longer need it.
+
+## Traps
+
+- **A `TEST_DATABASE_URL` that already has your tables**, for example because you started the app itself against it. The starter's test removes what it creates, but a table it did not create makes it refuse: `FAIL TEST_DATABASE_URL already has a notes table; use an empty scratch database`. Recreate the database (step 3).
+- **Testing an upgrade.** To prove an update keeps the existing data, first load the OLD version's tables and rows, then run the new version's start-up against them. [Keep data through updates](keep-data-through-updates.md) shows how, with `test/migrate.js`.
+- **Pointing the tests at the app's real `DATABASE_URL`.** The platform's database is reachable only from inside your app's container, and the tests would write to the customer's data. Use a scratch database only.
+
+## Related
+
+- [Keep data through updates](keep-data-through-updates.md)
+- [Change an app](change-an-app.md)
+- [Data](../concepts/data.md)
+- [Getting started](../getting-started.md)
 
 ---
 
@@ -3664,6 +3865,7 @@ An administrator opens the app's **Shares** tab. Each shared record type is a ca
 
 - **Fields are not shared until an administrator switches them on.** A field of an app's record type starts **Not shared**, with the badge "Waiting for your decision", and the tab says "N fields are waiting for your decision." Publishing a field does not share it.
 - Press **Turn on** on a field. A page asks "Share <field>?", names who would be able to read it (or says no app reads it yet), and has a button **Share <field>**. A field that looks like a contact detail carries the badge "Contact detail" and "Usually kept private."
+- **Turning a field on does not fill in records that were published before.** Those records carry the field only after your app publishes them again. Publish every current record at each start-up, as the starter does, and an update or the next change fills the field in.
 - Press **Turn off** on a shared field. This takes effect at once and removes that field's values from the platform's copy of the records. Your app's own data is untouched.
 - The card's **Who can read this** list names the apps, groups and people who can read the record type.
 - An app that publishes nothing shows "Your app doesn't share anything yet."
@@ -3946,7 +4148,7 @@ If `DATABASE_URL` is set, your app's container can reach that database. It canno
 ## Not set
 
 - `PORT`. Your app must listen on port 3000, on all addresses (`0.0.0.0`). Read `process.env.PORT` only as a local-testing override with 3000 as the fallback.
-- `NODE_ENV`, `HOST`, and every other variable not listed above. Set what you need in your `Dockerfile` with `ENV`.
+- `NODE_ENV`, `HOST`, `TZ`, and every other variable not listed above. Set what you need in your `Dockerfile` with `ENV`; the portal has no place to set a variable. The server's clock is UTC: for a business's own time zone see [Dates and time zones](../how-to/dates-and-time-zones.md).
 
 An app must not depend on any variable that is not on this page. Others may exist for the platform's own use and can change.
 
@@ -5193,6 +5395,14 @@ The card is headed **Deployment** and sits on the **People** tab of the app. It 
 
 It worked when the card reads `Your app is now running the latest commit.`
 
+### The card keeps reading `Updating to <commit>…`
+
+**What it means.** Usually nothing is wrong. An update normally goes live within about two minutes, but the card can keep showing `Updating to` for a while after the new version is serving, especially in a browser tab that is in the background.
+
+**What to do.** Open the app's `/health` in your signed-in browser. When its `buildCommit` is the commit you pushed, the update is live; reload the **People** tab to see the card catch up. If `/health` still shows the old commit after ten minutes, press **Update to latest commit** again.
+
+It worked when `/health` reports the new `buildCommit`.
+
 ### `We couldn't find the latest commit to update to, so nothing was built. Try again.`
 
 **What it means.** VMnodes could not read the head of the repository's default branch. The repository was renamed or made private, or GitHub access was removed.
@@ -5736,6 +5946,16 @@ It worked when `requireRole` stops throwing.
 **What it means.** Status 403. The person is not in the group `requireGroup` or `requireGroupId` asked for.
 
 **What to do.** Ask your VMnodes contact to add the person to the group, or attach a group that holds them under **Groups** on the **People** tab. It worked when `requireGroup` stops throwing.
+
+## In the browser
+
+### `ERR_CERT_AUTHORITY_INVALID`, or another certificate warning, on a new app's address
+
+**What it means.** The app's https certificate is still being issued. This happens for a few minutes after a new app's first launch reads **Working**.
+
+**What to do.** Wait a few minutes and reload. Never click through the warning, and never tell a customer to. If the warning is still there after fifteen minutes, ask your VMnodes contact.
+
+It worked when the app opens with no warning.
 
 ## When signing in
 
@@ -6626,7 +6846,7 @@ curl -sS -X POST "$VMNODES_API_URL/v1/publish/records" \
 
 # Reading shared data
 
-Discover, describe and query the entities other apps share, ask a question in plain language, and pin the answers as charts. What a caller sees is decided by data grants, not by the request. An entity with no grant for the caller is invisible. Grants are created by an organisation administrator: ask your VMnodes contact. Ask your VMnodes contact for an API token.
+Discover, describe and query the entities other apps share, ask a question in plain language, and pin the answers as charts. What a caller sees is decided by data grants, not by the request. An entity with no grant for the caller is invisible. A grant is created with POST /v1/data/grants by a caller holding an administrator-scoped API token for your org. The portal cannot issue API tokens or create grants today, even for an org administrator, so ask your VMnodes contact to create the grant and to give your app its token.
 
 ## List entities
 
