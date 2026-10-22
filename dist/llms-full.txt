@@ -171,7 +171,7 @@ Seeing what a reader sees needs no second person.
 
 1. On the launch page press **View app page**, then open the **People** tab.
 2. Find the row marked "(you)". Its **Roles** column shows `starter.editor`. Press **Change roles**. A box opens headed "Change roles for" and your name.
-3. Untick `starter.editor` and press **Save roles**. It worked when your row reads "No roles".
+3. Untick `starter.editor` and press **Save roles**. It worked when your row reads "No roles". Wait for that before you reload the app: a reload sent while the save is still finishing can show the old view. If it does, reload once more.
 4. Reload the app. The **New note** box is gone and the page reads "You can read notes. Posting needs the `starter.editor` role. Ask whoever runs this app to give it to you." You can still open the app: taking a role away does not take away access.
 5. Put the role back: **Change roles** on your row, tick `starter.editor`, **Save roles**. Reload the app. The **New note** box is back.
 
@@ -444,6 +444,23 @@ function page(user, visits, { error = "", values = {} } = {}) {
 <p id="kept"><small>${esc(KEPT[store.kind])}</small></p>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -453,6 +470,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   // Everything else: who is this? (Throws 401/503 if we cannot tell.)
   const user = await identity.currentUser(req.headers);
@@ -493,7 +513,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell("Visitor book", `<h1>Visitor book</h1><p>${esc(message)}</p>${status === 403 ? `<p>This app is for people with the <code>${esc(STAFF_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>` : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell("Visitor book", `<h1>Visitor book</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : `<p>This app is for people with the <code>${esc(STAFF_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>`) : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -660,13 +680,26 @@ function request(url, { method = "GET", headers = {}, body } = {}) {
   check("a made-up id -> 404", (await json(await staff(), "POST", "/api/visits/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11/leave")).status, 404);
   check("an id that is not a UUID -> 404, not a database error", (await json(await staff(), "POST", "/api/visits/not-an-id/leave")).status, 404);
 
-  // --- 7. A database that cannot be reached stops the app; it never falls back --
+  // --- 7. Changes sent from another site are refused, whoever is signed in ----
+  // A form on another app's page must not add a visitor as the signed-in person.
+  const formPost = async (extra) => request(`${app.url}/visits`, { method: "POST", headers: { ...(await staff()), "content-type": "application/x-www-form-urlencoded", ...extra }, body: "visitor=From+elsewhere&visiting=Grace" });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = (await formPost({ "sec-fetch-site": "cross-site" })).body;
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs it")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  const crossSiteVisits = (await json(await staff(), "GET", "/api/visits")).json().items.filter((v) => v.visitor === "From elsewhere").length;
+  check("...and none of those three posts was saved", crossSiteVisits, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+
+  // --- 8. A database that cannot be reached stops the app; it never falls back --
   const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: "postgres://visitors@127.0.0.1:1/visitors" });
   check("with DATABASE_URL set and no database, the app refuses to START", noDb.exited !== undefined && noDb.exited !== 0, true);
   check("...and says it will not start without its database", /will not start without its database/.test(noDb.out()), true);
 
-  // --- 8. The count itself: zero checks run must never read as a pass ---------
-  const FLOOR = 25;
+  // --- 9. The count itself: zero checks run must never read as a pass ---------
+  const FLOOR = 31;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   finish(fail === 0 ? 0 : 1);
@@ -682,7 +715,7 @@ function finish(code) {
 npm test
 ```
 
-It worked when the last line is `passed=27 failed=0`. A run that ends without a `passed=` line is broken plumbing, not a broken app: read the first line that starts `FAIL` or the error above it.
+It worked when the last line is `passed=33 failed=0`. A run that ends without a `passed=` line is broken plumbing, not a broken app: read the first line that starts `FAIL` or the error above it.
 
 ## 7. Try it on your computer
 
@@ -716,7 +749,7 @@ Opening the app needs the role, and only you hold it. On the app's **People** ta
 
 Run these in order. Items 2 to 5 need `npm run dev` running in another terminal, started as the default user `editor`.
 
-1. `npm test` ends `passed=27 failed=0`.
+1. `npm test` ends `passed=33 failed=0`.
 2. Adding through the form answers `303`, and the entry is in the list:
 
    ```bash
@@ -1031,6 +1064,23 @@ function page(user, requests, { error = "", values = {} } = {}) {
 <h2>${approver ? "All requests" : "Your requests"}</h2><table><thead><tr><th>Request</th><th>Cost</th><th>Status</th></tr></thead><tbody id="requests">${rows}</tbody></table>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -1038,6 +1088,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   // Holding neither role means no business here at all.
@@ -1098,7 +1151,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell(`<h1>Purchase requests</h1><p>${esc(message)}</p>${status === 403 ? "<p>Ask whoever runs this app to give you a role.</p>" : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell(`<h1>Purchase requests</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : "<p>Ask whoever runs this app to give you a role.</p>") : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -1203,19 +1256,20 @@ function check(name, got, want) {
   });
   const base = await new Promise((resolve) => child.stdout.on("data", (d) => { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }));
 
-  // Signs a token for one of the mock portal's people, the way the real gateway would. `over` changes claims.
-  async function call(who, method, p, body, over = {}) {
+  // Signs a token for one of the mock portal's people, the way the real gateway would. `over` changes claims;
+  // `extra` adds request headers, and a string body is sent as it is.
+  async function call(who, method, p, body, over = {}, extra = {}) {
     const u = { ...USERS[who], ...over };
     const token = await new SignJWT({ email: u.email, name: u.name, kind: u.kind, groups: u.groups, roles: u.roles })
       .setProtectedHeader({ alg: "RS256", kid: "local-dev" }).setSubject(u.sub).setIssuer(portal.issuer).setAudience(APP_ID)
       .setIssuedAt().setExpirationTime("5m").sign(portal.privateKey);
     return new Promise((resolve, reject) => {
-      const req = http.request(base + p, { method, headers: { "x-vmnodes-identity": token, "content-type": "application/json" } }, (res) => {
+      const req = http.request(base + p, { method, headers: { "x-vmnodes-identity": token, "content-type": "application/json", ...extra } }, (res) => {
         let data = ""; res.on("data", (c) => (data += c));
         res.on("end", () => resolve({ status: res.statusCode, body: data, json: () => JSON.parse(data) }));
       });
       req.on("error", reject);
-      if (body) req.write(JSON.stringify(body));
+      if (body) req.write(typeof body === "string" ? body : JSON.stringify(body));
       req.end();
     });
   }
@@ -1266,7 +1320,20 @@ function check(name, got, want) {
   const second = (await call("colleague", "POST", "/api/requests", { item: "Chair", amount: "99" })).json().id;
   check("CONTROL: an approver's page has an Approve button for a pending request", (await call("approver", "GET", "/")).body.includes(`/requests/${second}/decision`), true);
 
-  const FLOOR = 25;
+  // --- changes sent from another site are refused, whoever is signed in ---------
+  // A form on another app's page must not raise a request as the signed-in person.
+  const formPost = (extra) => call("requester", "POST", "/requests", "item=From+elsewhere&amount=5", {}, { "content-type": "application/x-www-form-urlencoded", ...extra });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = (await formPost({ "sec-fetch-site": "cross-site" })).body;
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs this app")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  const crossSiteRequests = (await call("requester", "GET", "/api/requests")).json().items.filter((r) => r.item === "From elsewhere").length;
+  check("...and none of those three posts was saved", crossSiteRequests, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+
+  const FLOOR = 31;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   child.kill(); portal.server.close();
@@ -1278,7 +1345,7 @@ function check(name, got, want) {
 npm test
 ```
 
-It worked when the last line is `passed=29 failed=0`. To run it against the database as well, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test`.
+It worked when the last line is `passed=35 failed=0`. To run it against the database as well, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test`.
 
 ## 7. Try it on your computer
 
@@ -1308,7 +1375,7 @@ The budget holder must already be a member of the org. There is no portal screen
 
 ## Check it works
 
-1. `npm test` ends `passed=29 failed=0`.
+1. `npm test` ends `passed=35 failed=0`.
 2. With `npm run dev -- requester` running in another terminal, walk the whole rule from the command line. Each command's expected output follows it.
 
    Raise a request as the requester. This prints `303`:
@@ -1580,6 +1647,23 @@ function page(user, items, { error = "", values = {} } = {}) {
 <p id="kept"><small>${esc(KEPT[store.kind])}</small></p>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -1587,6 +1671,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   identity.requireRole(user, KEEPER_ROLE); // every route below is for keepers, checked on the SERVER
@@ -1618,7 +1705,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell(`<h1>Stationery stock</h1><p>${esc(message)}</p>${status === 403 ? `<p>This app is for people with the <code>${esc(KEEPER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>` : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell(`<h1>Stationery stock</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : `<p>This app is for people with the <code>${esc(KEEPER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>`) : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -1776,7 +1863,7 @@ The server takes the new field and marks an item as low when its quantity falls 
  <p id="kept"><small>${esc(KEPT[store.kind])}</small></p>`);
  }
  
-@@ -85,15 +86,17 @@
+@@ -105,15 +106,17 @@
    if (url.pathname === "/api/items" && req.method === "GET") return send(res, 200, { items: await store.list() });
  
    if ((url.pathname === "/items" || url.pathname === "/api/items") && req.method === "POST") {
@@ -1830,13 +1917,18 @@ Then point the test script at the new file:
 
 ## 9. Test the change against the data version 1 made
 
-Save this as `test/migrate.js`. It builds version 1's table from literal text, not from `store.js`, so it keeps testing the old shape after `store.js` has moved on.
+Save this as `test/migrate.js`. It builds version 1's table from literal text, not from `store.js`, so it keeps testing the old shape after `store.js` has moved on. It also starts the app on that database and checks that it refuses a change sent from another site.
 
 ```js
 // test/migrate.js: proves the new version can open the database the old version made.
 //   TEST_DATABASE_URL=postgres://localhost/stationery_scratch node test/migrate.js
+// It also checks that the app refuses a change sent from another site.
 // Use an EMPTY scratch database: the test drops and recreates the table `items`.
+const { spawn } = require("node:child_process");
+const path = require("node:path");
 const postgres = require("postgres");
+const { SignJWT } = require("jose");
+const { startMockPortal, USERS } = require("../dev/mock-portal");
 const { openStore } = require("../store");
 
 const URL = process.env.TEST_DATABASE_URL;
@@ -1913,8 +2005,34 @@ const id = (n) => `00000000-0000-4000-8000-00000000000${n}`;
   try { await sql.unsafe(NOT_REPEATABLE); } catch { second = "refused"; }
   check("CONTROL: a change that is not safe to repeat is refused the second time", second, "refused");
 
+  // 7. Changes sent from another site are refused, whoever is signed in. This runs the app itself
+  // on the database version 2 just opened, so it checks the real route and what it saved.
+  await fresh();
+  const APP_ID = "app_migrate_test";
+  const portal = await startMockPortal({ port: 0, appId: APP_ID, as: "editor" });
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: { PATH: process.env.PATH, PORT: "0", LISTEN_ADDRESS: "127.0.0.1", VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: URL },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const base = await new Promise((resolve) => { child.once("exit", () => resolve(null)); child.stdout.on("data", (d) => { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }); });
+  const keeper = USERS.editor;
+  const token = await new SignJWT({ email: keeper.email, name: keeper.name, kind: keeper.kind, groups: keeper.groups, roles: keeper.roles })
+    .setProtectedHeader({ alg: "RS256", kid: "local-dev" }).setSubject(keeper.sub).setIssuer(portal.issuer).setAudience(APP_ID).setIssuedAt().setExpirationTime("5m").sign(portal.privateKey);
+  const asKeeper = (p, init = {}) => fetch(base + p, { redirect: "manual", ...init, headers: { "x-vmnodes-identity": token, ...init.headers } });
+  const formPost = (extra) => asKeeper("/items", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...extra }, body: "name=From+elsewhere&quantity=5" });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = await (await formPost({ "sec-fetch-site": "cross-site" })).text();
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs it")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  const crossSiteItems = (await (await asKeeper("/api/items")).json()).items.filter((i) => i.name === "From elsewhere").length;
+  check("...and none of those three posts was saved", crossSiteItems, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+  child.kill(); portal.server.close();
+
   await sql.end({ timeout: 5 });
-  const FLOOR = 10;
+  const FLOOR = 16;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   process.exit(fail === 0 ? 0 : 1);
@@ -1927,7 +2045,7 @@ Run it on an empty scratch database. It drops and recreates the table `items`:
 TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test
 ```
 
-It worked when the last line is `passed=10 failed=0`. A run with no `passed=` line is broken plumbing: read the first `FAIL` line, which carries the database's own message.
+It worked when the last line is `passed=16 failed=0`. A run with no `passed=` line is broken plumbing: read the first `FAIL` line, which carries the database's own message.
 
 ## 10. Update the live app
 
@@ -1945,7 +2063,7 @@ A roll back starts the earlier version against the database as it is now. It doe
 
 ## Check it works
 
-1. In `stationery-v2`, with an empty scratch database, `TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test` ends `passed=10 failed=0`.
+1. In `stationery-v2`, with an empty scratch database, `TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test` ends `passed=16 failed=0`.
 2. A row written by version 1 survives, from the command line. Use one scratch database for all of it, and run `npm run dev` in another terminal each time, stopping it with Ctrl+C before the next. Check out the commit from before step 8, which is version 1:
 
    ```bash
@@ -2333,6 +2451,23 @@ function page(user, bookings, { error = "", values = {} } = {}) {
 <p id="kept"><small>${esc(KEPT[store.kind])} Sharing: ${publisher.enabled ? `on, as ${esc(publisher.entity)}` : "off (normal when running locally)"}.</small></p>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -2340,6 +2475,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, publishing: publisher.enabled, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   identity.requireRole(user, BOOKER_ROLE); // every route below is for bookers, checked on the SERVER
@@ -2384,7 +2522,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell(`<h1>Meeting rooms</h1><p>${esc(message)}</p>${status === 403 ? `<p>This app is for people with the <code>${esc(BOOKER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>` : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell(`<h1>Meeting rooms</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : `<p>This app is for people with the <code>${esc(BOOKER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>`) : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -2500,11 +2638,11 @@ async function run({ label, databaseUrl, refuseFirst }) {
     stdio: ["ignore", "pipe", "ignore"],
   });
   const base = await new Promise((resolve) => child.stdout.on("data", (d) => { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }));
-  const call = async (method, p, body) => {
+  const call = async (method, p, body, extra = {}) => {
     const u = USERS.editor;
     const token = await new SignJWT({ email: u.email, name: u.name, kind: u.kind, groups: [], roles: u.roles })
       .setProtectedHeader({ alg: "RS256", kid: "local-dev" }).setSubject(u.sub).setIssuer(portal.issuer).setAudience(APP_ID).setIssuedAt().setExpirationTime("5m").sign(portal.privateKey);
-    const res = await fetch(base + p, { method, headers: { "x-vmnodes-identity": token, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(base + p, { method, redirect: "manual", headers: { "x-vmnodes-identity": token, "content-type": "application/json", ...extra }, body: typeof body === "string" ? body : body ? JSON.stringify(body) : undefined });
     const text = await res.text();
     return { status: res.status, text, json: () => JSON.parse(text) };
   };
@@ -2534,6 +2672,19 @@ async function run({ label, databaseUrl, refuseFirst }) {
   else check("memory + upsert: a cancelled booking stays shared (this is why a database is needed)", platform.state.records.has(id), true);
   check("the publish mode follows where the data is kept", [...new Set(platform.state.requests.filter((r) => r.url === "/v1/publish/records").map((r) => r.body.mode))], [databaseUrl ? "snapshot" : "upsert"]);
 
+  // A form on another app's page must not book a room as the signed-in person.
+  const form = () => new URLSearchParams({ room: "From elsewhere", startsAt: stamp(48), endsAt: stamp(49), organiserName: "Cross Carl", organiserPhone: "" }).toString();
+  const formPost = (extra) => call("POST", "/bookings", form(), { "content-type": "application/x-www-form-urlencoded", ...extra });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = (await formPost({ "sec-fetch-site": "cross-site" })).text;
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs it")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  check("...and none of those three posts was saved", (await call("GET", "/api/bookings")).json().items.filter((b) => b.room === "From elsewhere").length, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+  await sleep(300); // let the publish that booking triggers finish before the pretend platform stops
+
   child.kill(); portal.server.close(); platform.server.close();
 }
 
@@ -2541,7 +2692,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
   await run({ label: "kept in memory", refuseFirst: 2 });
   if (process.env.TEST_DATABASE_URL) await run({ label: "kept in Postgres", databaseUrl: process.env.TEST_DATABASE_URL, refuseFirst: 0 });
   else console.log("\nSKIP postgres run: set TEST_DATABASE_URL to an empty scratch database to run it");
-  const FLOOR = process.env.TEST_DATABASE_URL ? 18 : 10;
+  const FLOOR = process.env.TEST_DATABASE_URL ? 32 : 16;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   process.exit(fail === 0 ? 0 : 1);
@@ -2552,7 +2703,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
 npm test
 ```
 
-It worked when the last line is `passed=11 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=22 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
+It worked when the last line is `passed=17 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=34 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
 
 ## 8. Try it on your computer
 
@@ -2584,7 +2735,7 @@ Turning a field on does not fill in records that were published before. This app
 
 ## Check it works
 
-1. `npm test` ends `passed=11 failed=0`, and with `TEST_DATABASE_URL` set to an empty scratch database, `passed=22 failed=0`.
+1. `npm test` ends `passed=17 failed=0`, and with `TEST_DATABASE_URL` set to an empty scratch database, `passed=34 failed=0`.
 2. Locally, sharing is off and says so. With `npm run dev` running, this prints `"publishing":false`:
 
    ```bash
@@ -2882,7 +3033,7 @@ npm install
 npm test
 ```
 
-It worked when the last line is `passed=25 failed=0`. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.
+It worked when the last line is `passed=31 failed=0`. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.
 
 ## 3. Find out what is running now
 
@@ -2985,7 +3136,7 @@ The server takes, checks, saves and shows the category, and filters by it:
  <ul id="links">${items}</ul>`);
  }
  
-@@ -78,19 +84,25 @@
+@@ -98,19 +104,25 @@
    const user = await identity.currentUser(req.headers);
    identity.requireRole(user, EDITOR_ROLE);
  
@@ -3032,12 +3183,12 @@ Add these checks to `test/smoke.js`. They test the new rule in both directions: 
 ```diff
 --- a/test/smoke.js
 +++ b/test/smoke.js
-@@ -102,13 +102,28 @@
-   check("the form post answers 303 back to the list", posted.status, 303);
-   check("...and the new link is listed", (await json(await editor(), "GET", "/api/links")).json().items.length, 2);
+@@ -115,13 +115,28 @@
+   check("...and none of those three posts was saved", crossSiteLinks, 0);
+   check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
  
--  // --- 7. A database that cannot be reached stops the app; it never falls back --
-+  // --- 7. Categories ------------------------------------------------------------
+-  // --- 8. A database that cannot be reached stops the app; it never falls back --
++  // --- 8. Categories ------------------------------------------------------------
 +  const rota = (await json(await editor(), "GET", "/api/links")).json().items.find((l) => l.title.startsWith("Rota"));
 +  check("a link added without a category is 'General'", rota.category, "General");
 +  const forms = await json(await editor(), "POST", "/api/links", { title: "Leave form", url: "https://example.com/leave", category: "Forms" });
@@ -3052,15 +3203,15 @@ Add these checks to `test/smoke.js`. They test the new rule in both directions: 
 +  const selectHtml = (/<select id="category"[^>]*>([\s\S]*?)<\/select>/.exec((await request(`${portal.issuer}/`)).body) || [])[1] || "";
 +  check("the page offers every category in a select", ["General", "Forms", "Training", "Suppliers"].every((c) => selectHtml.includes(`>${c}</option>`)), true);
 +
-+  // --- 8. A database that cannot be reached stops the app; it never falls back --
++  // --- 9. A database that cannot be reached stops the app; it never falls back --
    const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: "postgres://links@127.0.0.1:1/links" });
    check("with DATABASE_URL set and no database, the app refuses to START", noDb.exited !== undefined && noDb.exited !== 0, true);
    check("...and says it will not start without its database", /will not start without its database/.test(noDb.out()), true);
  
--  // --- 8. The count itself: zero checks run must never read as a pass ---------
--  const FLOOR = 20;
-+  // --- 9. The count itself: zero checks run must never read as a pass ---------
-+  const FLOOR = 30;
+-  // --- 9. The count itself: zero checks run must never read as a pass ---------
+-  const FLOOR = 26;
++  // --- 10. The count itself: zero checks run must never read as a pass --------
++  const FLOOR = 36;
    if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
    console.log(`\npassed=${pass} failed=${fail}`);
    finish(fail === 0 ? 0 : 1);
@@ -3070,7 +3221,7 @@ Add these checks to `test/smoke.js`. They test the new rule in both directions: 
 npm test
 ```
 
-It worked when the last line is `passed=33 failed=0`, higher than the baseline.
+It worked when the last line is `passed=39 failed=0`, higher than the baseline.
 
 ## 6. Commit it, without pushing yet
 
@@ -3134,7 +3285,7 @@ Then fix the problem in a new commit and update again. Do not leave the reposito
 
 ## Check it works
 
-1. Before the change, `npm test` ends `passed=25 failed=0`. After it, `passed=33 failed=0`.
+1. Before the change, `npm test` ends `passed=31 failed=0`. After it, `passed=39 failed=0`.
 2. The role list is untouched. This prints `unchanged`:
 
    ```bash
@@ -3304,7 +3455,7 @@ Print the zone wherever a date or a time appears, for example "Times are Sydney 
 
 Run your app's database tests on your own computer, against a private Postgres that you start, use and stop yourself. Read this before the first launch of any app with `"database": true`, and before every update that changes what the app stores.
 
-The platform gives your app a real database only online. Without a local one, `npm test` skips its database checks. The starter, for example, ends with `SKIP postgres section` and `passed=40 failed=0`. Your SQL would then run for the first time on the customer's data.
+The platform gives your app a real database only online. Without a local one, `npm test` skips its database checks. The starter, for example, ends with `SKIP postgres section` and `passed=45 failed=0`. Your SQL would then run for the first time on the customer's data.
 
 ## What you need
 
@@ -3345,7 +3496,7 @@ createdb -w -h 127.0.0.1 -p $PGPORT_SCRATCH -U app scratch
 TEST_DATABASE_URL=postgres://app@127.0.0.1:$PGPORT_SCRATCH/scratch npm test
 ```
 
-It worked when there is no `SKIP postgres` line and the last line reads `failed=0`. For the starter it reads `passed=47 failed=0`.
+It worked when there is no `SKIP postgres` line and the last line reads `failed=0`. For the starter it reads `passed=52 failed=0`.
 
 `-w` means never ask for a password. Without it, a `createdb` that reaches the wrong server waits forever at a password prompt.
 
@@ -3582,6 +3733,30 @@ const status = err instanceof IdentityError ? err.status : err instanceof Syntax
 ```
 
 Do not confuse the two 403s. The gateway's "Not authorised" page means the person has no access to the app and your app never ran. A 403 from `requireRole` means the person is in the app but lacks a role. See [Roles](roles.md).
+
+## Refuse changes sent from another site
+
+A page on another site can submit a form to your app, and the browser sends your app's sign-in with it. Your app then sees a valid identity header and acts as that person. Every app on `vmnodes.com`, in every org, counts as the same "site", so the sign-in cookie's `SameSite` setting does not stop a page on another app. Your app must refuse such a request itself, on every route that changes something.
+
+The browser says where a request came from in the `Sec-Fetch-Site` header. Refuse a change unless it reads `same-origin` (or `none`, for something the person typed in themselves). An older browser sends `Origin` instead; refuse a change whose `Origin` is not your app's own address. These lines are the starter's, called before anything else for every request except `/health`:
+
+```js
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+```
+
+- **`same-site` is not safe here.** It means "another app on vmnodes.com", which is exactly the case to refuse.
+- **Never change anything on a `GET`.** A link or an image can send a `GET` from anywhere, with the person's sign-in.
+- **It worked when** a test that posts with `Sec-Fetch-Site: cross-site` gets 403 and saves nothing, and the same post with `same-origin` succeeds. The starter's `npm test` checks both.
 
 ## `/health` has no sign-in
 
@@ -4720,6 +4895,21 @@ An app can read only what it has been given access to. Today, giving an app acce
 | `orderBy` | Optional `{field, dir}`. `dir` is `asc` or `desc`. |
 | `limit` | Optional positive whole number. Default 50, at most 200. |
 | `aggregate` | Optional `{fn, field?, groupBy?, buckets?}`. `fn` is `count`, `sum`, `min` or `max`. `buckets` is `{field: "day" | "month" | "year"}`. A grouped result is capped at 200 groups. |
+
+### How a filter compares values
+
+A filter compares values by the field's `type`, which the publishing app declared in `queryableFields`. `GET /v1/data/entities/<entity>` lists each field and its type.
+
+- **`number`:** compared as numbers.
+- **`string`:** compared as text. `eq` is exact and case-sensitive; `contains` ignores case.
+- **`timestamp`:** compared as a point in time, and **any time-zone offset in the value is ignored**. Write every timestamp filter in UTC, ending in `Z`.
+  - `"2026-10-20"` means midnight UTC at the start of 20 October.
+  - `"2026-10-20T00:00:00+11:00"` is read as midnight UTC, eleven hours late, and nothing warns you.
+  - To ask for one day or week in the business's own time zone, turn its start and end into UTC instants first. [Dates and time zones](../how-to/dates-and-time-zones.md) has `wallTimeToInstant` for that.
+  - A stored value that does not begin with `YYYY-MM-DD` never matches a timestamp filter.
+- **`boolean`:** compared as the text `true` or `false`.
+
+An aggregate returns one row per group, holding the `groupBy` fields and one value named after `fn`. For example, `"aggregate": {"fn": "count", "groupBy": ["stylist"]}` returns rows such as `{"stylist": "Ana", "count": 3}`. With no `groupBy` it returns one row, such as `{"count": 12}`. `sum`, `min` and `max` read the `field` you name as a number, and skip values that are not numbers.
 
 The response:
 

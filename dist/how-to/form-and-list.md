@@ -233,6 +233,23 @@ function page(user, visits, { error = "", values = {} } = {}) {
 <p id="kept"><small>${esc(KEPT[store.kind])}</small></p>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -242,6 +259,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   // Everything else: who is this? (Throws 401/503 if we cannot tell.)
   const user = await identity.currentUser(req.headers);
@@ -282,7 +302,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell("Visitor book", `<h1>Visitor book</h1><p>${esc(message)}</p>${status === 403 ? `<p>This app is for people with the <code>${esc(STAFF_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>` : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell("Visitor book", `<h1>Visitor book</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : `<p>This app is for people with the <code>${esc(STAFF_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>`) : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -449,13 +469,26 @@ function request(url, { method = "GET", headers = {}, body } = {}) {
   check("a made-up id -> 404", (await json(await staff(), "POST", "/api/visits/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11/leave")).status, 404);
   check("an id that is not a UUID -> 404, not a database error", (await json(await staff(), "POST", "/api/visits/not-an-id/leave")).status, 404);
 
-  // --- 7. A database that cannot be reached stops the app; it never falls back --
+  // --- 7. Changes sent from another site are refused, whoever is signed in ----
+  // A form on another app's page must not add a visitor as the signed-in person.
+  const formPost = async (extra) => request(`${app.url}/visits`, { method: "POST", headers: { ...(await staff()), "content-type": "application/x-www-form-urlencoded", ...extra }, body: "visitor=From+elsewhere&visiting=Grace" });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = (await formPost({ "sec-fetch-site": "cross-site" })).body;
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs it")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  const crossSiteVisits = (await json(await staff(), "GET", "/api/visits")).json().items.filter((v) => v.visitor === "From elsewhere").length;
+  check("...and none of those three posts was saved", crossSiteVisits, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+
+  // --- 8. A database that cannot be reached stops the app; it never falls back --
   const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: "postgres://visitors@127.0.0.1:1/visitors" });
   check("with DATABASE_URL set and no database, the app refuses to START", noDb.exited !== undefined && noDb.exited !== 0, true);
   check("...and says it will not start without its database", /will not start without its database/.test(noDb.out()), true);
 
-  // --- 8. The count itself: zero checks run must never read as a pass ---------
-  const FLOOR = 25;
+  // --- 9. The count itself: zero checks run must never read as a pass ---------
+  const FLOOR = 31;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   finish(fail === 0 ? 0 : 1);
@@ -471,7 +504,7 @@ function finish(code) {
 npm test
 ```
 
-It worked when the last line is `passed=27 failed=0`. A run that ends without a `passed=` line is broken plumbing, not a broken app: read the first line that starts `FAIL` or the error above it.
+It worked when the last line is `passed=33 failed=0`. A run that ends without a `passed=` line is broken plumbing, not a broken app: read the first line that starts `FAIL` or the error above it.
 
 ## 7. Try it on your computer
 
@@ -505,7 +538,7 @@ Opening the app needs the role, and only you hold it. On the app's **People** ta
 
 Run these in order. Items 2 to 5 need `npm run dev` running in another terminal, started as the default user `editor`.
 
-1. `npm test` ends `passed=27 failed=0`.
+1. `npm test` ends `passed=33 failed=0`.
 2. Adding through the form answers `303`, and the entry is in the list:
 
    ```bash

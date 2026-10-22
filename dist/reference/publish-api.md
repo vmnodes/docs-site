@@ -176,6 +176,21 @@ An app can read only what it has been given access to. Today, giving an app acce
 | `limit` | Optional positive whole number. Default 50, at most 200. |
 | `aggregate` | Optional `{fn, field?, groupBy?, buckets?}`. `fn` is `count`, `sum`, `min` or `max`. `buckets` is `{field: "day" | "month" | "year"}`. A grouped result is capped at 200 groups. |
 
+### How a filter compares values
+
+A filter compares values by the field's `type`, which the publishing app declared in `queryableFields`. `GET /v1/data/entities/<entity>` lists each field and its type.
+
+- **`number`:** compared as numbers.
+- **`string`:** compared as text. `eq` is exact and case-sensitive; `contains` ignores case.
+- **`timestamp`:** compared as a point in time, and **any time-zone offset in the value is ignored**. Write every timestamp filter in UTC, ending in `Z`.
+  - `"2026-10-20"` means midnight UTC at the start of 20 October.
+  - `"2026-10-20T00:00:00+11:00"` is read as midnight UTC, eleven hours late, and nothing warns you.
+  - To ask for one day or week in the business's own time zone, turn its start and end into UTC instants first. [Dates and time zones](../how-to/dates-and-time-zones.md) has `wallTimeToInstant` for that.
+  - A stored value that does not begin with `YYYY-MM-DD` never matches a timestamp filter.
+- **`boolean`:** compared as the text `true` or `false`.
+
+An aggregate returns one row per group, holding the `groupBy` fields and one value named after `fn`. For example, `"aggregate": {"fn": "count", "groupBy": ["stylist"]}` returns rows such as `{"stylist": "Ana", "count": 3}`. With no `groupBy` it returns one row, such as `{"count": 12}`. `sum`, `min` and `max` read the `field` you name as a number, and skip values that are not numbers.
+
 The response:
 
 ```json

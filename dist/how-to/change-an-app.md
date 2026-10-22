@@ -32,7 +32,7 @@ npm install
 npm test
 ```
 
-It worked when the last line is `passed=25 failed=0`. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.
+It worked when the last line is `passed=31 failed=0`. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.
 
 ## 3. Find out what is running now
 
@@ -135,7 +135,7 @@ The server takes, checks, saves and shows the category, and filters by it:
  <ul id="links">${items}</ul>`);
  }
  
-@@ -78,19 +84,25 @@
+@@ -98,19 +104,25 @@
    const user = await identity.currentUser(req.headers);
    identity.requireRole(user, EDITOR_ROLE);
  
@@ -182,12 +182,12 @@ Add these checks to `test/smoke.js`. They test the new rule in both directions: 
 ```diff
 --- a/test/smoke.js
 +++ b/test/smoke.js
-@@ -102,13 +102,28 @@
-   check("the form post answers 303 back to the list", posted.status, 303);
-   check("...and the new link is listed", (await json(await editor(), "GET", "/api/links")).json().items.length, 2);
+@@ -115,13 +115,28 @@
+   check("...and none of those three posts was saved", crossSiteLinks, 0);
+   check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
  
--  // --- 7. A database that cannot be reached stops the app; it never falls back --
-+  // --- 7. Categories ------------------------------------------------------------
+-  // --- 8. A database that cannot be reached stops the app; it never falls back --
++  // --- 8. Categories ------------------------------------------------------------
 +  const rota = (await json(await editor(), "GET", "/api/links")).json().items.find((l) => l.title.startsWith("Rota"));
 +  check("a link added without a category is 'General'", rota.category, "General");
 +  const forms = await json(await editor(), "POST", "/api/links", { title: "Leave form", url: "https://example.com/leave", category: "Forms" });
@@ -202,15 +202,15 @@ Add these checks to `test/smoke.js`. They test the new rule in both directions: 
 +  const selectHtml = (/<select id="category"[^>]*>([\s\S]*?)<\/select>/.exec((await request(`${portal.issuer}/`)).body) || [])[1] || "";
 +  check("the page offers every category in a select", ["General", "Forms", "Training", "Suppliers"].every((c) => selectHtml.includes(`>${c}</option>`)), true);
 +
-+  // --- 8. A database that cannot be reached stops the app; it never falls back --
++  // --- 9. A database that cannot be reached stops the app; it never falls back --
    const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: "postgres://links@127.0.0.1:1/links" });
    check("with DATABASE_URL set and no database, the app refuses to START", noDb.exited !== undefined && noDb.exited !== 0, true);
    check("...and says it will not start without its database", /will not start without its database/.test(noDb.out()), true);
  
--  // --- 8. The count itself: zero checks run must never read as a pass ---------
--  const FLOOR = 20;
-+  // --- 9. The count itself: zero checks run must never read as a pass ---------
-+  const FLOOR = 30;
+-  // --- 9. The count itself: zero checks run must never read as a pass ---------
+-  const FLOOR = 26;
++  // --- 10. The count itself: zero checks run must never read as a pass --------
++  const FLOOR = 36;
    if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
    console.log(`\npassed=${pass} failed=${fail}`);
    finish(fail === 0 ? 0 : 1);
@@ -220,7 +220,7 @@ Add these checks to `test/smoke.js`. They test the new rule in both directions: 
 npm test
 ```
 
-It worked when the last line is `passed=33 failed=0`, higher than the baseline.
+It worked when the last line is `passed=39 failed=0`, higher than the baseline.
 
 ## 6. Commit it, without pushing yet
 
@@ -284,7 +284,7 @@ Then fix the problem in a new commit and update again. Do not leave the reposito
 
 ## Check it works
 
-1. Before the change, `npm test` ends `passed=25 failed=0`. After it, `passed=33 failed=0`.
+1. Before the change, `npm test` ends `passed=31 failed=0`. After it, `passed=39 failed=0`.
 2. The role list is untouched. This prints `unchanged`:
 
    ```bash

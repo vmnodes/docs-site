@@ -244,6 +244,23 @@ function page(user, requests, { error = &quot;&quot;, values = {} } = {}) {
 &lt;h2&gt;${approver ? &quot;All requests&quot; : &quot;Your requests&quot;}&lt;/h2&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Request&lt;/th&gt;&lt;th&gt;Cost&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;requests&quot;&gt;${rows}&lt;/tbody&gt;&lt;/table&gt;`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app&#39;s
+// sign-in with it. Every app on vmnodes.com counts as one &quot;site&quot;, so the sign-in cookie&#39;s
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app&#39;s own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = &quot;a change sent from another site was refused&quot;;
+function refuseCrossSiteWrite(req) {
+  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot; || req.method === &quot;OPTIONS&quot;) return;
+  const site = req.headers[&quot;sec-fetch-site&quot;];
+  if (site) {
+    if (site !== &quot;same-origin&quot; &amp;&amp; site !== &quot;none&quot;) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin &amp;&amp; origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, &quot;http://app&quot;);
   const isApi = url.pathname.startsWith(&quot;/api/&quot;);
@@ -251,6 +268,9 @@ async function handle(req, res) {
   if (url.pathname === &quot;/health&quot;) {
     return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   // Holding neither role means no business here at all.
@@ -311,7 +331,7 @@ const server = http.createServer((req, res) =&gt; {
     if (status &gt;= 500) console.error(err.cause || err);
     const message = status === 500 ? &quot;something went wrong&quot; : err.message;
     if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
-    send(res, status, shell(`&lt;h1&gt;Purchase requests&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? &quot;&lt;p&gt;Ask whoever runs this app to give you a role.&lt;/p&gt;&quot; : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+    send(res, status, shell(`&lt;h1&gt;Purchase requests&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? (message === CROSS_SITE_REFUSED ? &quot;&lt;p&gt;Nothing was changed. To make this change, open this app and use its own page.&lt;/p&gt;&quot; : &quot;&lt;p&gt;Ask whoever runs this app to give you a role.&lt;/p&gt;&quot;) : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
   });
 });
 store.init().then(
@@ -393,19 +413,20 @@ function check(name, got, want) {
   });
   const base = await new Promise((resolve) =&gt; child.stdout.on(&quot;data&quot;, (d) =&gt; { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }));
 
-  // Signs a token for one of the mock portal&#39;s people, the way the real gateway would. `over` changes claims.
-  async function call(who, method, p, body, over = {}) {
+  // Signs a token for one of the mock portal&#39;s people, the way the real gateway would. `over` changes claims;
+  // `extra` adds request headers, and a string body is sent as it is.
+  async function call(who, method, p, body, over = {}, extra = {}) {
     const u = { ...USERS[who], ...over };
     const token = await new SignJWT({ email: u.email, name: u.name, kind: u.kind, groups: u.groups, roles: u.roles })
       .setProtectedHeader({ alg: &quot;RS256&quot;, kid: &quot;local-dev&quot; }).setSubject(u.sub).setIssuer(portal.issuer).setAudience(APP_ID)
       .setIssuedAt().setExpirationTime(&quot;5m&quot;).sign(portal.privateKey);
     return new Promise((resolve, reject) =&gt; {
-      const req = http.request(base + p, { method, headers: { &quot;x-vmnodes-identity&quot;: token, &quot;content-type&quot;: &quot;application/json&quot; } }, (res) =&gt; {
+      const req = http.request(base + p, { method, headers: { &quot;x-vmnodes-identity&quot;: token, &quot;content-type&quot;: &quot;application/json&quot;, ...extra } }, (res) =&gt; {
         let data = &quot;&quot;; res.on(&quot;data&quot;, (c) =&gt; (data += c));
         res.on(&quot;end&quot;, () =&gt; resolve({ status: res.statusCode, body: data, json: () =&gt; JSON.parse(data) }));
       });
       req.on(&quot;error&quot;, reject);
-      if (body) req.write(JSON.stringify(body));
+      if (body) req.write(typeof body === &quot;string&quot; ? body : JSON.stringify(body));
       req.end();
     });
   }
@@ -456,14 +477,27 @@ function check(name, got, want) {
   const second = (await call(&quot;colleague&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { item: &quot;Chair&quot;, amount: &quot;99&quot; })).json().id;
   check(&quot;CONTROL: an approver&#39;s page has an Approve button for a pending request&quot;, (await call(&quot;approver&quot;, &quot;GET&quot;, &quot;/&quot;)).body.includes(`/requests/${second}/decision`), true);
 
-  const FLOOR = 25;
+  // --- changes sent from another site are refused, whoever is signed in ---------
+  // A form on another app&#39;s page must not raise a request as the signed-in person.
+  const formPost = (extra) =&gt; call(&quot;requester&quot;, &quot;POST&quot;, &quot;/requests&quot;, &quot;item=From+elsewhere&amp;amount=5&quot;, {}, { &quot;content-type&quot;: &quot;application/x-www-form-urlencoded&quot;, ...extra });
+  const viaBrowser = async (extra) =&gt; (await formPost(extra)).status;
+  check(&quot;a form post from ANOTHER site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; }), 403);
+  const refusal = (await formPost({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; })).body;
+  check(&quot;the refusal page says nothing was changed, and does not say a role is missing&quot;, [refusal.includes(&quot;Nothing was changed&quot;), refusal.includes(&quot;Ask whoever runs this app&quot;)], [true, false]);
+  check(&quot;a form post from a SIBLING app on the same site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-site&quot; }), 403);
+  check(&quot;a post with a foreign Origin and no fetch metadata -&gt; 403&quot;, await viaBrowser({ origin: &quot;https://evil.example&quot; }), 403);
+  const crossSiteRequests = (await call(&quot;requester&quot;, &quot;GET&quot;, &quot;/api/requests&quot;)).json().items.filter((r) =&gt; r.item === &quot;From elsewhere&quot;).length;
+  check(&quot;...and none of those three posts was saved&quot;, crossSiteRequests, 0);
+  check(&quot;CONTROL: the app&#39;s own form (same-origin) still posts -&gt; 303&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-origin&quot; }), 303);
+
+  const FLOOR = 31;
   if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   child.kill(); portal.server.close();
   process.exit(fail === 0 ? 0 : 1);
 })().catch((e) =&gt; { console.error(&quot;test crashed:&quot;, e); process.exit(1); });</code></pre>
 <pre data-lang="bash"><code>npm test</code></pre>
-<p>It worked when the last line is <code>passed=29 failed=0</code>. To run it against the database as well, give it an empty scratch Postgres database (<a href="/how-to/test-with-a-scratch-database">Test with a scratch database</a> starts one): <code>TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test</code>.</p>
+<p>It worked when the last line is <code>passed=35 failed=0</code>. To run it against the database as well, give it an empty scratch Postgres database (<a href="/how-to/test-with-a-scratch-database">Test with a scratch database</a> starts one): <code>TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test</code>.</p>
 <h2 id="7-try-it-on-your-computer">7. Try it on your computer<a class="d-anchor" href="#7-try-it-on-your-computer" aria-label="Link to this section">#</a></h2>
 <p>The pretend portal&#39;s default person no longer exists, so name one:</p>
 <pre data-lang="bash"><code>npm run dev -- requester</code></pre>
@@ -477,7 +511,7 @@ function check(name, got, want) {
 <p>On the app&#39;s <strong>People</strong> tab, press <strong>Change roles</strong> on each person, tick the roles and press <strong>Save roles</strong>. Give the budget holder <code>purchasing.approver</code> and everyone who may ask for things <code>purchasing.requester</code>. It worked when each row lists the roles you ticked.</p>
 <p>The budget holder must already be a member of the org. There is no portal screen for adding one, so ask your VMnodes contact. See <a href="/reference/limits">Limits</a>.</p>
 <h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
-<ol><li><code>npm test</code> ends <code>passed=29 failed=0</code>.</li><li>With <code>npm run dev -- requester</code> running in another terminal, walk the whole rule from the command line. Each command&#39;s expected output follows it. Raise a request as the requester. This prints <code>303</code>: <code>bash curl -s -o /dev/null -w &#39;%{http_code}\n&#39; -X POST -d &#39;item=Standing+desk&amp;amount=249.90&#39; http://127.0.0.1:4100/requests </code> Another requester sees none of it. This prints <code>{&quot;items&quot;:[]}</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/colleague curl -s http://127.0.0.1:4100/api/requests </code> Another requester cannot approve it. Switch back, copy the request&#39;s id, then try as the colleague. The last command prints <code>{&quot;error&quot;:&quot;role &#39;purchasing.approver&#39; required&quot;} 403</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/requester ID=$(curl -s http://127.0.0.1:4100/api/requests | node -pe &#39;JSON.parse(require(&quot;fs&quot;).readFileSync(0,&quot;utf8&quot;)).items[0].id&#39;) curl -s -o /dev/null http://127.0.0.1:4100/_as/colleague curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> The approver can. The last command prints the request with <code>&quot;status&quot;:&quot;approved&quot;</code>, <code>&quot;decidedByName&quot;:&quot;Avery Approver&quot;</code> and <code>&quot;note&quot;:&quot;Within budget&quot;</code>, then <code> 200</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/approver curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;,&quot;note&quot;:&quot;Within budget&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> A second decision is refused and the first stands. This prints <code>{&quot;error&quot;:&quot;this request has already been decided&quot;} 409</code>: <code>bash curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;reject&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> Nobody decides their own request, even holding both roles. This prints <code>{&quot;error&quot;:&quot;you cannot decide your own request&quot;} 403</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/both curl -s -o /dev/null -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;item&quot;:&quot;Monitor&quot;,&quot;amount&quot;:&quot;180&quot;}&#39; http://127.0.0.1:4100/api/requests MINE=$(curl -s http://127.0.0.1:4100/api/requests | node -pe &#39;JSON.parse(require(&quot;fs&quot;).readFileSync(0,&quot;utf8&quot;)).items.find((r) =&gt; r.item === &quot;Monitor&quot;).id&#39;) curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;}&#39; http://127.0.0.1:4100/api/requests/$MINE/decision </code></li><li>After the launch, <code>https://purchase-requests.acme.vmnodes.com/health</code>, opened in the browser you are signed in with, shows <code>&quot;status&quot;:&quot;ok&quot;</code> and <code>&quot;storage&quot;:&quot;postgres&quot;</code>.</li><li>On the live app, signed in as the person who launched it (who holds both roles), raise a request. It worked when the row reads &quot;Waiting&quot; with no <strong>Approve</strong> button. Sign in as the budget holder, who holds only <code>purchasing.approver</code>: the same row has <strong>Approve</strong> and <strong>Reject</strong>.</li></ol>
+<ol><li><code>npm test</code> ends <code>passed=35 failed=0</code>.</li><li>With <code>npm run dev -- requester</code> running in another terminal, walk the whole rule from the command line. Each command&#39;s expected output follows it. Raise a request as the requester. This prints <code>303</code>: <code>bash curl -s -o /dev/null -w &#39;%{http_code}\n&#39; -X POST -d &#39;item=Standing+desk&amp;amount=249.90&#39; http://127.0.0.1:4100/requests </code> Another requester sees none of it. This prints <code>{&quot;items&quot;:[]}</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/colleague curl -s http://127.0.0.1:4100/api/requests </code> Another requester cannot approve it. Switch back, copy the request&#39;s id, then try as the colleague. The last command prints <code>{&quot;error&quot;:&quot;role &#39;purchasing.approver&#39; required&quot;} 403</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/requester ID=$(curl -s http://127.0.0.1:4100/api/requests | node -pe &#39;JSON.parse(require(&quot;fs&quot;).readFileSync(0,&quot;utf8&quot;)).items[0].id&#39;) curl -s -o /dev/null http://127.0.0.1:4100/_as/colleague curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> The approver can. The last command prints the request with <code>&quot;status&quot;:&quot;approved&quot;</code>, <code>&quot;decidedByName&quot;:&quot;Avery Approver&quot;</code> and <code>&quot;note&quot;:&quot;Within budget&quot;</code>, then <code> 200</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/approver curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;,&quot;note&quot;:&quot;Within budget&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> A second decision is refused and the first stands. This prints <code>{&quot;error&quot;:&quot;this request has already been decided&quot;} 409</code>: <code>bash curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;reject&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> Nobody decides their own request, even holding both roles. This prints <code>{&quot;error&quot;:&quot;you cannot decide your own request&quot;} 403</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/both curl -s -o /dev/null -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;item&quot;:&quot;Monitor&quot;,&quot;amount&quot;:&quot;180&quot;}&#39; http://127.0.0.1:4100/api/requests MINE=$(curl -s http://127.0.0.1:4100/api/requests | node -pe &#39;JSON.parse(require(&quot;fs&quot;).readFileSync(0,&quot;utf8&quot;)).items.find((r) =&gt; r.item === &quot;Monitor&quot;).id&#39;) curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;}&#39; http://127.0.0.1:4100/api/requests/$MINE/decision </code></li><li>After the launch, <code>https://purchase-requests.acme.vmnodes.com/health</code>, opened in the browser you are signed in with, shows <code>&quot;status&quot;:&quot;ok&quot;</code> and <code>&quot;storage&quot;:&quot;postgres&quot;</code>.</li><li>On the live app, signed in as the person who launched it (who holds both roles), raise a request. It worked when the row reads &quot;Waiting&quot; with no <strong>Approve</strong> button. Sign in as the budget holder, who holds only <code>purchasing.approver</code>: the same row has <strong>Approve</strong> and <strong>Reject</strong>.</li></ol>
 <h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
 <ul><li><strong>The role check belongs on the server, on the decision route.</strong> A hidden button stops nobody who sends the request directly. <code>server.js</code> calls <code>identity.requireRole(user, APPROVER_ROLE)</code> on every decision, whatever the page showed.</li><li><strong>Declare both roles, and check both strings.</strong> A role the code checks and <code>vmnodes.json</code> does not declare can never be given to anyone, so nobody could approve. The strings in <code>vmnodes.json</code>, <code>server.js</code> and <code>dev/mock-portal.js</code> must match.</li><li><strong>Key ownership on the identity <code>id</code>, never the email.</strong> An address can be reused or changed. <code>owner_id</code> holds <code>user.id</code>.</li><li><strong>Answer a request that is not yours exactly like one that does not exist.</strong> Both answer 404 <code>no such request</code>, so nobody can probe for ids. A 403 for &quot;not yours&quot; tells them the id is real.</li><li><strong>Refuse self-approval on the server.</strong> The page hides the buttons on your own request, but <code>you cannot decide your own request</code> is what enforces it. Giving one person both roles is allowed; deciding their own request is not.</li><li><strong>Decide only a pending request, in the same statement that writes the decision.</strong> The <code>where status = &#39;pending&#39;</code> makes two approvers pressing <strong>Approve</strong> at once produce one decision and one <code>this request has already been decided</code>, not two.</li><li><strong>One account cannot prove separation of duties.</strong> The person who launches the app holds every role, so they can raise requests but not approve them, and that is the only thing one account can show. Approval needs a second org member who holds only the approver role.</li><li><strong>A role added by an update reaches nobody.</strong> If you add a role later, give it with <strong>Change roles</strong>. See <a href="/concepts/roles">Roles</a>.</li><li><strong>Money in whole cents.</strong> <code>parseAmount</code> accepts <code>12</code>, <code>12.5</code> and <code>12.50</code> and refuses <code>-3</code>, <code>1e3</code> and <code>12.345</code>, so a float never reaches the database.</li><li><strong>Test &quot;cannot approve&quot; with a person who did not raise the request.</strong> The owner is refused by the own-request rule as well, so that case stays green even if the role check is removed. The second requester in <code>test/approvals.js</code> is the one that proves the role rule.</li></ul>
 <h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>

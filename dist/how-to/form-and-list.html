@@ -225,6 +225,23 @@ function page(user, visits, { error = &quot;&quot;, values = {} } = {}) {
 &lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])}&lt;/small&gt;&lt;/p&gt;`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app&#39;s
+// sign-in with it. Every app on vmnodes.com counts as one &quot;site&quot;, so the sign-in cookie&#39;s
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app&#39;s own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = &quot;a change sent from another site was refused&quot;;
+function refuseCrossSiteWrite(req) {
+  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot; || req.method === &quot;OPTIONS&quot;) return;
+  const site = req.headers[&quot;sec-fetch-site&quot;];
+  if (site) {
+    if (site !== &quot;same-origin&quot; &amp;&amp; site !== &quot;none&quot;) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin &amp;&amp; origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, &quot;http://app&quot;);
   const isApi = url.pathname.startsWith(&quot;/api/&quot;);
@@ -234,6 +251,9 @@ async function handle(req, res) {
   if (url.pathname === &quot;/health&quot;) {
     return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   // Everything else: who is this? (Throws 401/503 if we cannot tell.)
   const user = await identity.currentUser(req.headers);
@@ -274,7 +294,7 @@ const server = http.createServer((req, res) =&gt; {
     if (status &gt;= 500) console.error(err.cause || err);
     const message = status === 500 ? &quot;something went wrong&quot; : err.message;
     if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
-    send(res, status, shell(&quot;Visitor book&quot;, `&lt;h1&gt;Visitor book&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(STAFF_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;` : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+    send(res, status, shell(&quot;Visitor book&quot;, `&lt;h1&gt;Visitor book&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? (message === CROSS_SITE_REFUSED ? &quot;&lt;p&gt;Nothing was changed. To make this change, open this app and use its own page.&lt;/p&gt;&quot; : `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(STAFF_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;`) : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
   });
 });
 store.init().then(
@@ -422,13 +442,26 @@ function request(url, { method = &quot;GET&quot;, headers = {}, body } = {}) {
   check(&quot;a made-up id -&gt; 404&quot;, (await json(await staff(), &quot;POST&quot;, &quot;/api/visits/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11/leave&quot;)).status, 404);
   check(&quot;an id that is not a UUID -&gt; 404, not a database error&quot;, (await json(await staff(), &quot;POST&quot;, &quot;/api/visits/not-an-id/leave&quot;)).status, 404);
 
-  // --- 7. A database that cannot be reached stops the app; it never falls back --
+  // --- 7. Changes sent from another site are refused, whoever is signed in ----
+  // A form on another app&#39;s page must not add a visitor as the signed-in person.
+  const formPost = async (extra) =&gt; request(`${app.url}/visits`, { method: &quot;POST&quot;, headers: { ...(await staff()), &quot;content-type&quot;: &quot;application/x-www-form-urlencoded&quot;, ...extra }, body: &quot;visitor=From+elsewhere&amp;visiting=Grace&quot; });
+  const viaBrowser = async (extra) =&gt; (await formPost(extra)).status;
+  check(&quot;a form post from ANOTHER site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; }), 403);
+  const refusal = (await formPost({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; })).body;
+  check(&quot;the refusal page says nothing was changed, and does not say a role is missing&quot;, [refusal.includes(&quot;Nothing was changed&quot;), refusal.includes(&quot;Ask whoever runs it&quot;)], [true, false]);
+  check(&quot;a form post from a SIBLING app on the same site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-site&quot; }), 403);
+  check(&quot;a post with a foreign Origin and no fetch metadata -&gt; 403&quot;, await viaBrowser({ origin: &quot;https://evil.example&quot; }), 403);
+  const crossSiteVisits = (await json(await staff(), &quot;GET&quot;, &quot;/api/visits&quot;)).json().items.filter((v) =&gt; v.visitor === &quot;From elsewhere&quot;).length;
+  check(&quot;...and none of those three posts was saved&quot;, crossSiteVisits, 0);
+  check(&quot;CONTROL: the app&#39;s own form (same-origin) still posts -&gt; 303&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-origin&quot; }), 303);
+
+  // --- 8. A database that cannot be reached stops the app; it never falls back --
   const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: &quot;postgres://visitors@127.0.0.1:1/visitors&quot; });
   check(&quot;with DATABASE_URL set and no database, the app refuses to START&quot;, noDb.exited !== undefined &amp;&amp; noDb.exited !== 0, true);
   check(&quot;...and says it will not start without its database&quot;, /will not start without its database/.test(noDb.out()), true);
 
-  // --- 8. The count itself: zero checks run must never read as a pass ---------
-  const FLOOR = 25;
+  // --- 9. The count itself: zero checks run must never read as a pass ---------
+  const FLOOR = 31;
   if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   finish(fail === 0 ? 0 : 1);
@@ -439,7 +472,7 @@ function finish(code) {
   process.exit(code);
 }</code></pre>
 <pre data-lang="bash"><code>npm test</code></pre>
-<p>It worked when the last line is <code>passed=27 failed=0</code>. A run that ends without a <code>passed=</code> line is broken plumbing, not a broken app: read the first line that starts <code>FAIL</code> or the error above it.</p>
+<p>It worked when the last line is <code>passed=33 failed=0</code>. A run that ends without a <code>passed=</code> line is broken plumbing, not a broken app: read the first line that starts <code>FAIL</code> or the error above it.</p>
 <h2 id="7-try-it-on-your-computer">7. Try it on your computer<a class="d-anchor" href="#7-try-it-on-your-computer" aria-label="Link to this section">#</a></h2>
 <pre data-lang="bash"><code>npm run dev</code></pre>
 <p>It prints <code>Open http://127.0.0.1:4100 in your browser.</code> Open that address.</p>
@@ -455,7 +488,7 @@ git push</code></pre>
 <p>Opening the app needs the role, and only you hold it. On the app&#39;s <strong>People</strong> tab press <strong>Change roles</strong> on each person who should use it, tick <code>visitors.staff</code> and press <strong>Save roles</strong>. It worked when their row lists <code>visitors.staff</code>. The person must already be a member of the org: there is no portal screen for adding one, so ask your VMnodes contact. See <a href="/reference/limits">Limits</a>.</p>
 <h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
 <p>Run these in order. Items 2 to 5 need <code>npm run dev</code> running in another terminal, started as the default user <code>editor</code>.</p>
-<ol><li><code>npm test</code> ends <code>passed=27 failed=0</code>.</li><li>Adding through the form answers <code>303</code>, and the entry is in the list:<pre data-lang="bash"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; -X POST -d &#39;visitor=Ada&amp;company=Analytical&amp;visiting=Grace&#39; http://127.0.0.1:4100/visits
+<ol><li><code>npm test</code> ends <code>passed=33 failed=0</code>.</li><li>Adding through the form answers <code>303</code>, and the entry is in the list:<pre data-lang="bash"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; -X POST -d &#39;visitor=Ada&amp;company=Analytical&amp;visiting=Grace&#39; http://127.0.0.1:4100/visits
 curl -s http://127.0.0.1:4100/api/visits</code></pre>
 <p>The first prints <code>303</code>. The second prints one item with <code>&quot;visitor&quot;:&quot;Ada&quot;</code> and <code>&quot;leftAt&quot;:null</code>.</p></li><li>The server refuses an empty name even when the form is bypassed. This prints <code>{&quot;error&quot;:&quot;visitor is required&quot;}</code>:<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;visitor&quot;:&quot;&quot;,&quot;visiting&quot;:&quot;Grace&quot;}&#39; http://127.0.0.1:4100/api/visits</code></pre></li><li>A request with no identity header is refused. Port 3000 is the app itself, with no portal in front. This prints <code>401</code>:<pre data-lang="bash"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:3000/api/visits</code></pre></li><li>A signed-in person without the role is refused, and signing back in lets them through:<pre data-lang="bash"><code>curl -s -o /dev/null http://127.0.0.1:4100/_as/reader
 curl -s http://127.0.0.1:4100/api/visits

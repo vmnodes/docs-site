@@ -85,6 +85,30 @@ const status = err instanceof IdentityError ? err.status : err instanceof Syntax
 
 Do not confuse the two 403s. The gateway's "Not authorised" page means the person has no access to the app and your app never ran. A 403 from `requireRole` means the person is in the app but lacks a role. See [Roles](roles.md).
 
+## Refuse changes sent from another site
+
+A page on another site can submit a form to your app, and the browser sends your app's sign-in with it. Your app then sees a valid identity header and acts as that person. Every app on `vmnodes.com`, in every org, counts as the same "site", so the sign-in cookie's `SameSite` setting does not stop a page on another app. Your app must refuse such a request itself, on every route that changes something.
+
+The browser says where a request came from in the `Sec-Fetch-Site` header. Refuse a change unless it reads `same-origin` (or `none`, for something the person typed in themselves). An older browser sends `Origin` instead; refuse a change whose `Origin` is not your app's own address. These lines are the starter's, called before anything else for every request except `/health`:
+
+```js
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+```
+
+- **`same-site` is not safe here.** It means "another app on vmnodes.com", which is exactly the case to refuse.
+- **Never change anything on a `GET`.** A link or an image can send a `GET` from anywhere, with the person's sign-in.
+- **It worked when** a test that posts with `Sec-Fetch-Site: cross-site` gets 403 and saves nothing, and the same post with `same-origin` succeeds. The starter's `npm test` checks both.
+
 ## `/health` has no sign-in
 
 The platform checks that your app is alive by calling `/health` on the container with nobody signed in. If `/health` required an identity, that check would always fail and the launch would never go live. Serve it before any identity check. A person who opens `/health` in a browser still passes through the gateway's sign-in first.

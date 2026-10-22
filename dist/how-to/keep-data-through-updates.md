@@ -197,6 +197,23 @@ function page(user, items, { error = "", values = {} } = {}) {
 <p id="kept"><small>${esc(KEPT[store.kind])}</small></p>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -204,6 +221,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   identity.requireRole(user, KEEPER_ROLE); // every route below is for keepers, checked on the SERVER
@@ -235,7 +255,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell(`<h1>Stationery stock</h1><p>${esc(message)}</p>${status === 403 ? `<p>This app is for people with the <code>${esc(KEEPER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>` : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell(`<h1>Stationery stock</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : `<p>This app is for people with the <code>${esc(KEEPER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>`) : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -393,7 +413,7 @@ The server takes the new field and marks an item as low when its quantity falls 
  <p id="kept"><small>${esc(KEPT[store.kind])}</small></p>`);
  }
  
-@@ -85,15 +86,17 @@
+@@ -105,15 +106,17 @@
    if (url.pathname === "/api/items" && req.method === "GET") return send(res, 200, { items: await store.list() });
  
    if ((url.pathname === "/items" || url.pathname === "/api/items") && req.method === "POST") {
@@ -447,13 +467,18 @@ Then point the test script at the new file:
 
 ## 9. Test the change against the data version 1 made
 
-Save this as `test/migrate.js`. It builds version 1's table from literal text, not from `store.js`, so it keeps testing the old shape after `store.js` has moved on.
+Save this as `test/migrate.js`. It builds version 1's table from literal text, not from `store.js`, so it keeps testing the old shape after `store.js` has moved on. It also starts the app on that database and checks that it refuses a change sent from another site.
 
 ```js
 // test/migrate.js: proves the new version can open the database the old version made.
 //   TEST_DATABASE_URL=postgres://localhost/stationery_scratch node test/migrate.js
+// It also checks that the app refuses a change sent from another site.
 // Use an EMPTY scratch database: the test drops and recreates the table `items`.
+const { spawn } = require("node:child_process");
+const path = require("node:path");
 const postgres = require("postgres");
+const { SignJWT } = require("jose");
+const { startMockPortal, USERS } = require("../dev/mock-portal");
 const { openStore } = require("../store");
 
 const URL = process.env.TEST_DATABASE_URL;
@@ -530,8 +555,34 @@ const id = (n) => `00000000-0000-4000-8000-00000000000${n}`;
   try { await sql.unsafe(NOT_REPEATABLE); } catch { second = "refused"; }
   check("CONTROL: a change that is not safe to repeat is refused the second time", second, "refused");
 
+  // 7. Changes sent from another site are refused, whoever is signed in. This runs the app itself
+  // on the database version 2 just opened, so it checks the real route and what it saved.
+  await fresh();
+  const APP_ID = "app_migrate_test";
+  const portal = await startMockPortal({ port: 0, appId: APP_ID, as: "editor" });
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: { PATH: process.env.PATH, PORT: "0", LISTEN_ADDRESS: "127.0.0.1", VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: URL },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const base = await new Promise((resolve) => { child.once("exit", () => resolve(null)); child.stdout.on("data", (d) => { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }); });
+  const keeper = USERS.editor;
+  const token = await new SignJWT({ email: keeper.email, name: keeper.name, kind: keeper.kind, groups: keeper.groups, roles: keeper.roles })
+    .setProtectedHeader({ alg: "RS256", kid: "local-dev" }).setSubject(keeper.sub).setIssuer(portal.issuer).setAudience(APP_ID).setIssuedAt().setExpirationTime("5m").sign(portal.privateKey);
+  const asKeeper = (p, init = {}) => fetch(base + p, { redirect: "manual", ...init, headers: { "x-vmnodes-identity": token, ...init.headers } });
+  const formPost = (extra) => asKeeper("/items", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...extra }, body: "name=From+elsewhere&quantity=5" });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = await (await formPost({ "sec-fetch-site": "cross-site" })).text();
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs it")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  const crossSiteItems = (await (await asKeeper("/api/items")).json()).items.filter((i) => i.name === "From elsewhere").length;
+  check("...and none of those three posts was saved", crossSiteItems, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+  child.kill(); portal.server.close();
+
   await sql.end({ timeout: 5 });
-  const FLOOR = 10;
+  const FLOOR = 16;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   process.exit(fail === 0 ? 0 : 1);
@@ -544,7 +595,7 @@ Run it on an empty scratch database. It drops and recreates the table `items`:
 TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test
 ```
 
-It worked when the last line is `passed=10 failed=0`. A run with no `passed=` line is broken plumbing: read the first `FAIL` line, which carries the database's own message.
+It worked when the last line is `passed=16 failed=0`. A run with no `passed=` line is broken plumbing: read the first `FAIL` line, which carries the database's own message.
 
 ## 10. Update the live app
 
@@ -562,7 +613,7 @@ A roll back starts the earlier version against the database as it is now. It doe
 
 ## Check it works
 
-1. In `stationery-v2`, with an empty scratch database, `TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test` ends `passed=10 failed=0`.
+1. In `stationery-v2`, with an empty scratch database, `TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test` ends `passed=16 failed=0`.
 2. A row written by version 1 survives, from the command line. Use one scratch database for all of it, and run `npm run dev` in another terminal each time, stopping it with Ctrl+C before the next. Check out the commit from before step 8, which is version 1:
 
    ```bash

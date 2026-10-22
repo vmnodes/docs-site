@@ -2,7 +2,7 @@
 
 Run your app's database tests on your own computer, against a private Postgres that you start, use and stop yourself. Read this before the first launch of any app with `"database": true`, and before every update that changes what the app stores.
 
-The platform gives your app a real database only online. Without a local one, `npm test` skips its database checks. The starter, for example, ends with `SKIP postgres section` and `passed=40 failed=0`. Your SQL would then run for the first time on the customer's data.
+The platform gives your app a real database only online. Without a local one, `npm test` skips its database checks. The starter, for example, ends with `SKIP postgres section` and `passed=45 failed=0`. Your SQL would then run for the first time on the customer's data.
 
 ## What you need
 
@@ -43,7 +43,7 @@ createdb -w -h 127.0.0.1 -p $PGPORT_SCRATCH -U app scratch
 TEST_DATABASE_URL=postgres://app@127.0.0.1:$PGPORT_SCRATCH/scratch npm test
 ```
 
-It worked when there is no `SKIP postgres` line and the last line reads `failed=0`. For the starter it reads `passed=47 failed=0`.
+It worked when there is no `SKIP postgres` line and the last line reads `failed=0`. For the starter it reads `passed=52 failed=0`.
 
 `-w` means never ask for a password. Without it, a `createdb` that reaches the wrong server waits forever at a password prompt.
 

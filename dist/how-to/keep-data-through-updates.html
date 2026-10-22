@@ -191,6 +191,23 @@ function page(user, items, { error = &quot;&quot;, values = {} } = {}) {
 &lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])}&lt;/small&gt;&lt;/p&gt;`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app&#39;s
+// sign-in with it. Every app on vmnodes.com counts as one &quot;site&quot;, so the sign-in cookie&#39;s
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app&#39;s own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = &quot;a change sent from another site was refused&quot;;
+function refuseCrossSiteWrite(req) {
+  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot; || req.method === &quot;OPTIONS&quot;) return;
+  const site = req.headers[&quot;sec-fetch-site&quot;];
+  if (site) {
+    if (site !== &quot;same-origin&quot; &amp;&amp; site !== &quot;none&quot;) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin &amp;&amp; origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, &quot;http://app&quot;);
   const isApi = url.pathname.startsWith(&quot;/api/&quot;);
@@ -198,6 +215,9 @@ async function handle(req, res) {
   if (url.pathname === &quot;/health&quot;) {
     return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   identity.requireRole(user, KEEPER_ROLE); // every route below is for keepers, checked on the SERVER
@@ -229,7 +249,7 @@ const server = http.createServer((req, res) =&gt; {
     if (status &gt;= 500) console.error(err.cause || err);
     const message = status === 500 ? &quot;something went wrong&quot; : err.message;
     if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
-    send(res, status, shell(`&lt;h1&gt;Stationery stock&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(KEEPER_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;` : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+    send(res, status, shell(`&lt;h1&gt;Stationery stock&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? (message === CROSS_SITE_REFUSED ? &quot;&lt;p&gt;Nothing was changed. To make this change, open this app and use its own page.&lt;/p&gt;&quot; : `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(KEEPER_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;`) : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
   });
 });
 store.init().then(
@@ -348,7 +368,7 @@ DATABASE_URL=postgres://localhost/stationery_scratch npm run dev</code></pre>
  &lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])}&lt;/small&gt;&lt;/p&gt;`);
  }
  
-@@ -85,15 +86,17 @@
+@@ -105,15 +106,17 @@
    if (url.pathname === &quot;/api/items&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: await store.list() });
  
    if ((url.pathname === &quot;/items&quot; || url.pathname === &quot;/api/items&quot;) &amp;&amp; req.method === &quot;POST&quot;) {
@@ -391,11 +411,16 @@ DATABASE_URL=postgres://localhost/stationery_scratch npm run dev</code></pre>
    &quot;engines&quot;: {
      &quot;node&quot;: &quot;&gt;=22&quot;</code></pre>
 <h2 id="9-test-the-change-against-the-data-version-1-made">9. Test the change against the data version 1 made<a class="d-anchor" href="#9-test-the-change-against-the-data-version-1-made" aria-label="Link to this section">#</a></h2>
-<p>Save this as <code>test/migrate.js</code>. It builds version 1&#39;s table from literal text, not from <code>store.js</code>, so it keeps testing the old shape after <code>store.js</code> has moved on.</p>
+<p>Save this as <code>test/migrate.js</code>. It builds version 1&#39;s table from literal text, not from <code>store.js</code>, so it keeps testing the old shape after <code>store.js</code> has moved on. It also starts the app on that database and checks that it refuses a change sent from another site.</p>
 <pre data-lang="js"><code>// test/migrate.js: proves the new version can open the database the old version made.
 //   TEST_DATABASE_URL=postgres://localhost/stationery_scratch node test/migrate.js
+// It also checks that the app refuses a change sent from another site.
 // Use an EMPTY scratch database: the test drops and recreates the table `items`.
+const { spawn } = require(&quot;node:child_process&quot;);
+const path = require(&quot;node:path&quot;);
 const postgres = require(&quot;postgres&quot;);
+const { SignJWT } = require(&quot;jose&quot;);
+const { startMockPortal, USERS } = require(&quot;../dev/mock-portal&quot;);
 const { openStore } = require(&quot;../store&quot;);
 
 const URL = process.env.TEST_DATABASE_URL;
@@ -472,15 +497,41 @@ const id = (n) =&gt; `00000000-0000-4000-8000-00000000000${n}`;
   try { await sql.unsafe(NOT_REPEATABLE); } catch { second = &quot;refused&quot;; }
   check(&quot;CONTROL: a change that is not safe to repeat is refused the second time&quot;, second, &quot;refused&quot;);
 
+  // 7. Changes sent from another site are refused, whoever is signed in. This runs the app itself
+  // on the database version 2 just opened, so it checks the real route and what it saved.
+  await fresh();
+  const APP_ID = &quot;app_migrate_test&quot;;
+  const portal = await startMockPortal({ port: 0, appId: APP_ID, as: &quot;editor&quot; });
+  const child = spawn(process.execPath, [path.join(__dirname, &quot;..&quot;, &quot;server.js&quot;)], {
+    env: { PATH: process.env.PATH, PORT: &quot;0&quot;, LISTEN_ADDRESS: &quot;127.0.0.1&quot;, VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: URL },
+    stdio: [&quot;ignore&quot;, &quot;pipe&quot;, &quot;inherit&quot;],
+  });
+  const base = await new Promise((resolve) =&gt; { child.once(&quot;exit&quot;, () =&gt; resolve(null)); child.stdout.on(&quot;data&quot;, (d) =&gt; { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }); });
+  const keeper = USERS.editor;
+  const token = await new SignJWT({ email: keeper.email, name: keeper.name, kind: keeper.kind, groups: keeper.groups, roles: keeper.roles })
+    .setProtectedHeader({ alg: &quot;RS256&quot;, kid: &quot;local-dev&quot; }).setSubject(keeper.sub).setIssuer(portal.issuer).setAudience(APP_ID).setIssuedAt().setExpirationTime(&quot;5m&quot;).sign(portal.privateKey);
+  const asKeeper = (p, init = {}) =&gt; fetch(base + p, { redirect: &quot;manual&quot;, ...init, headers: { &quot;x-vmnodes-identity&quot;: token, ...init.headers } });
+  const formPost = (extra) =&gt; asKeeper(&quot;/items&quot;, { method: &quot;POST&quot;, headers: { &quot;content-type&quot;: &quot;application/x-www-form-urlencoded&quot;, ...extra }, body: &quot;name=From+elsewhere&amp;quantity=5&quot; });
+  const viaBrowser = async (extra) =&gt; (await formPost(extra)).status;
+  check(&quot;a form post from ANOTHER site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; }), 403);
+  const refusal = await (await formPost({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; })).text();
+  check(&quot;the refusal page says nothing was changed, and does not say a role is missing&quot;, [refusal.includes(&quot;Nothing was changed&quot;), refusal.includes(&quot;Ask whoever runs it&quot;)], [true, false]);
+  check(&quot;a form post from a SIBLING app on the same site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-site&quot; }), 403);
+  check(&quot;a post with a foreign Origin and no fetch metadata -&gt; 403&quot;, await viaBrowser({ origin: &quot;https://evil.example&quot; }), 403);
+  const crossSiteItems = (await (await asKeeper(&quot;/api/items&quot;)).json()).items.filter((i) =&gt; i.name === &quot;From elsewhere&quot;).length;
+  check(&quot;...and none of those three posts was saved&quot;, crossSiteItems, 0);
+  check(&quot;CONTROL: the app&#39;s own form (same-origin) still posts -&gt; 303&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-origin&quot; }), 303);
+  child.kill(); portal.server.close();
+
   await sql.end({ timeout: 5 });
-  const FLOOR = 10;
+  const FLOOR = 16;
   if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((e) =&gt; { console.error(&quot;FAIL the test itself crashed:&quot;, e.message); process.exit(1); });</code></pre>
 <p>Run it on an empty scratch database. It drops and recreates the table <code>items</code>:</p>
 <pre data-lang="bash"><code>TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test</code></pre>
-<p>It worked when the last line is <code>passed=10 failed=0</code>. A run with no <code>passed=</code> line is broken plumbing: read the first <code>FAIL</code> line, which carries the database&#39;s own message.</p>
+<p>It worked when the last line is <code>passed=16 failed=0</code>. A run with no <code>passed=</code> line is broken plumbing: read the first <code>FAIL</code> line, which carries the database&#39;s own message.</p>
 <h2 id="10-update-the-live-app">10. Update the live app<a class="d-anchor" href="#10-update-the-live-app" aria-label="Link to this section">#</a></h2>
 <p>Commit and push. In the portal, open the app&#39;s <strong>People</strong> tab, find the <strong>Deployment</strong> card and press <strong>Update to latest commit</strong>.</p>
 <p>It worked when the card reads &quot;Updating to&quot; and the new commit, then &quot;Your app is now running the latest commit.&quot; Open the app: the items you added in step 7 are still listed, and for each of them the <strong>Reorder at</strong> column is empty. Add an item with a quantity of 3 and a reorder level of 5: <strong>Low stock</strong> appears beside its quantity.</p>
@@ -489,7 +540,7 @@ const id = (n) =&gt; `00000000-0000-4000-8000-00000000000${n}`;
 <p>In <strong>Console</strong>, open the app&#39;s <strong>Deployments</strong> tab and press <strong>Roll back to this</strong> on the earlier deployment. It worked when <code>/health</code> shows <code>&quot;version&quot;:&quot;0.1.0&quot;</code> and the items are still listed, including the one you added in version 2.</p>
 <p>A roll back starts the earlier version against the database as it is now. It does not undo the new column. Version 1 never mentions the column, so it works against it.</p>
 <h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
-<ol><li>In <code>stationery-v2</code>, with an empty scratch database, <code>TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test</code> ends <code>passed=10 failed=0</code>.</li><li>A row written by version 1 survives, from the command line. Use one scratch database for all of it, and run <code>npm run dev</code> in another terminal each time, stopping it with Ctrl+C before the next. Check out the commit from before step 8, which is version 1:<pre data-lang="bash"><code>export DATABASE_URL=postgres://localhost/stationery_scratch
+<ol><li>In <code>stationery-v2</code>, with an empty scratch database, <code>TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test</code> ends <code>passed=16 failed=0</code>.</li><li>A row written by version 1 survives, from the command line. Use one scratch database for all of it, and run <code>npm run dev</code> in another terminal each time, stopping it with Ctrl+C before the next. Check out the commit from before step 8, which is version 1:<pre data-lang="bash"><code>export DATABASE_URL=postgres://localhost/stationery_scratch
 git checkout &lt;the commit before step 8&gt;</code></pre>
 <p>With version 1 running, add an item:</p>
 <pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;name&quot;:&quot;Pens&quot;,&quot;quantity&quot;:40}&#39; http://127.0.0.1:4100/api/items</code></pre>

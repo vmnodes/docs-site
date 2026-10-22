@@ -333,6 +333,23 @@ function page(user, bookings, { error = "", values = {} } = {}) {
 <p id="kept"><small>${esc(KEPT[store.kind])} Sharing: ${publisher.enabled ? `on, as ${esc(publisher.entity)}` : "off (normal when running locally)"}.</small></p>`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app's
+// sign-in with it. Every app on vmnodes.com counts as one "site", so the sign-in cookie's
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app's own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = "a change sent from another site was refused";
+function refuseCrossSiteWrite(req) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const site = req.headers["sec-fetch-site"];
+  if (site) {
+    if (site !== "same-origin" && site !== "none") throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://app");
   const isApi = url.pathname.startsWith("/api/");
@@ -340,6 +357,9 @@ async function handle(req, res) {
   if (url.pathname === "/health") {
     return send(res, 200, { status: "ok", app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, publishing: publisher.enabled, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   identity.requireRole(user, BOOKER_ROLE); // every route below is for bookers, checked on the SERVER
@@ -384,7 +404,7 @@ const server = http.createServer((req, res) => {
     if (status >= 500) console.error(err.cause || err);
     const message = status === 500 ? "something went wrong" : err.message;
     if (new URL(req.url, "http://app").pathname.startsWith("/api/")) return send(res, status, { error: message });
-    send(res, status, shell(`<h1>Meeting rooms</h1><p>${esc(message)}</p>${status === 403 ? `<p>This app is for people with the <code>${esc(BOOKER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>` : ""}`), "text/html; charset=utf-8");
+    send(res, status, shell(`<h1>Meeting rooms</h1><p>${esc(message)}</p>${status === 403 ? (message === CROSS_SITE_REFUSED ? "<p>Nothing was changed. To make this change, open this app and use its own page.</p>" : `<p>This app is for people with the <code>${esc(BOOKER_ROLE)}</code> role. Ask whoever runs it to give it to you.</p>`) : ""}`), "text/html; charset=utf-8");
   });
 });
 store.init().then(
@@ -500,11 +520,11 @@ async function run({ label, databaseUrl, refuseFirst }) {
     stdio: ["ignore", "pipe", "ignore"],
   });
   const base = await new Promise((resolve) => child.stdout.on("data", (d) => { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }));
-  const call = async (method, p, body) => {
+  const call = async (method, p, body, extra = {}) => {
     const u = USERS.editor;
     const token = await new SignJWT({ email: u.email, name: u.name, kind: u.kind, groups: [], roles: u.roles })
       .setProtectedHeader({ alg: "RS256", kid: "local-dev" }).setSubject(u.sub).setIssuer(portal.issuer).setAudience(APP_ID).setIssuedAt().setExpirationTime("5m").sign(portal.privateKey);
-    const res = await fetch(base + p, { method, headers: { "x-vmnodes-identity": token, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(base + p, { method, redirect: "manual", headers: { "x-vmnodes-identity": token, "content-type": "application/json", ...extra }, body: typeof body === "string" ? body : body ? JSON.stringify(body) : undefined });
     const text = await res.text();
     return { status: res.status, text, json: () => JSON.parse(text) };
   };
@@ -534,6 +554,19 @@ async function run({ label, databaseUrl, refuseFirst }) {
   else check("memory + upsert: a cancelled booking stays shared (this is why a database is needed)", platform.state.records.has(id), true);
   check("the publish mode follows where the data is kept", [...new Set(platform.state.requests.filter((r) => r.url === "/v1/publish/records").map((r) => r.body.mode))], [databaseUrl ? "snapshot" : "upsert"]);
 
+  // A form on another app's page must not book a room as the signed-in person.
+  const form = () => new URLSearchParams({ room: "From elsewhere", startsAt: stamp(48), endsAt: stamp(49), organiserName: "Cross Carl", organiserPhone: "" }).toString();
+  const formPost = (extra) => call("POST", "/bookings", form(), { "content-type": "application/x-www-form-urlencoded", ...extra });
+  const viaBrowser = async (extra) => (await formPost(extra)).status;
+  check("a form post from ANOTHER site -> 403", await viaBrowser({ "sec-fetch-site": "cross-site" }), 403);
+  const refusal = (await formPost({ "sec-fetch-site": "cross-site" })).text;
+  check("the refusal page says nothing was changed, and does not say a role is missing", [refusal.includes("Nothing was changed"), refusal.includes("Ask whoever runs it")], [true, false]);
+  check("a form post from a SIBLING app on the same site -> 403", await viaBrowser({ "sec-fetch-site": "same-site" }), 403);
+  check("a post with a foreign Origin and no fetch metadata -> 403", await viaBrowser({ origin: "https://evil.example" }), 403);
+  check("...and none of those three posts was saved", (await call("GET", "/api/bookings")).json().items.filter((b) => b.room === "From elsewhere").length, 0);
+  check("CONTROL: the app's own form (same-origin) still posts -> 303", await viaBrowser({ "sec-fetch-site": "same-origin" }), 303);
+  await sleep(300); // let the publish that booking triggers finish before the pretend platform stops
+
   child.kill(); portal.server.close(); platform.server.close();
 }
 
@@ -541,7 +574,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
   await run({ label: "kept in memory", refuseFirst: 2 });
   if (process.env.TEST_DATABASE_URL) await run({ label: "kept in Postgres", databaseUrl: process.env.TEST_DATABASE_URL, refuseFirst: 0 });
   else console.log("\nSKIP postgres run: set TEST_DATABASE_URL to an empty scratch database to run it");
-  const FLOOR = process.env.TEST_DATABASE_URL ? 18 : 10;
+  const FLOOR = process.env.TEST_DATABASE_URL ? 32 : 16;
   if (pass + fail < FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   process.exit(fail === 0 ? 0 : 1);
@@ -552,7 +585,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
 npm test
 ```
 
-It worked when the last line is `passed=11 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=22 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
+It worked when the last line is `passed=17 failed=0`. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database ([Test with a scratch database](test-with-a-scratch-database.md) starts one): `TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test` ends `passed=34 failed=0`. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.
 
 ## 8. Try it on your computer
 
@@ -584,7 +617,7 @@ Turning a field on does not fill in records that were published before. This app
 
 ## Check it works
 
-1. `npm test` ends `passed=11 failed=0`, and with `TEST_DATABASE_URL` set to an empty scratch database, `passed=22 failed=0`.
+1. `npm test` ends `passed=17 failed=0`, and with `TEST_DATABASE_URL` set to an empty scratch database, `passed=34 failed=0`.
 2. Locally, sharing is off and says so. With `npm run dev` running, this prints `"publishing":false`:
 
    ```bash

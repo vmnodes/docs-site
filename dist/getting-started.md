@@ -99,7 +99,7 @@ Seeing what a reader sees needs no second person.
 
 1. On the launch page press **View app page**, then open the **People** tab.
 2. Find the row marked "(you)". Its **Roles** column shows `starter.editor`. Press **Change roles**. A box opens headed "Change roles for" and your name.
-3. Untick `starter.editor` and press **Save roles**. It worked when your row reads "No roles".
+3. Untick `starter.editor` and press **Save roles**. It worked when your row reads "No roles". Wait for that before you reload the app: a reload sent while the save is still finishing can show the old view. If it does, reload once more.
 4. Reload the app. The **New note** box is gone and the page reads "You can read notes. Posting needs the `starter.editor` role. Ask whoever runs this app to give it to you." You can still open the app: taking a role away does not take away access.
 5. Put the role back: **Change roles** on your row, tick `starter.editor`, **Save roles**. Reload the app. The **New note** box is back.
 

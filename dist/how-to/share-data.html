@@ -320,6 +320,23 @@ function page(user, bookings, { error = &quot;&quot;, values = {} } = {}) {
 &lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])} Sharing: ${publisher.enabled ? `on, as ${esc(publisher.entity)}` : &quot;off (normal when running locally)&quot;}.&lt;/small&gt;&lt;/p&gt;`);
 }
 
+// A page on ANOTHER site can submit a form to this app, and the browser sends this app&#39;s
+// sign-in with it. Every app on vmnodes.com counts as one &quot;site&quot;, so the sign-in cookie&#39;s
+// SameSite setting does not stop a page on another app. So refuse every write that the
+// browser says came from anywhere but this app&#39;s own pages. A caller that is not a browser
+// sends neither header and carries no sign-in cookie, so it is unaffected.
+const CROSS_SITE_REFUSED = &quot;a change sent from another site was refused&quot;;
+function refuseCrossSiteWrite(req) {
+  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot; || req.method === &quot;OPTIONS&quot;) return;
+  const site = req.headers[&quot;sec-fetch-site&quot;];
+  if (site) {
+    if (site !== &quot;same-origin&quot; &amp;&amp; site !== &quot;none&quot;) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin &amp;&amp; origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, &quot;http://app&quot;);
   const isApi = url.pathname.startsWith(&quot;/api/&quot;);
@@ -327,6 +344,9 @@ async function handle(req, res) {
   if (url.pathname === &quot;/health&quot;) {
     return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, publishing: publisher.enabled, storage: store.kind });
   }
+
+  // A change sent from another site is refused before anything else, whoever is signed in.
+  refuseCrossSiteWrite(req);
 
   const user = await identity.currentUser(req.headers);
   identity.requireRole(user, BOOKER_ROLE); // every route below is for bookers, checked on the SERVER
@@ -371,7 +391,7 @@ const server = http.createServer((req, res) =&gt; {
     if (status &gt;= 500) console.error(err.cause || err);
     const message = status === 500 ? &quot;something went wrong&quot; : err.message;
     if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
-    send(res, status, shell(`&lt;h1&gt;Meeting rooms&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(BOOKER_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;` : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+    send(res, status, shell(`&lt;h1&gt;Meeting rooms&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? (message === CROSS_SITE_REFUSED ? &quot;&lt;p&gt;Nothing was changed. To make this change, open this app and use its own page.&lt;/p&gt;&quot; : `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(BOOKER_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;`) : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
   });
 });
 store.init().then(
@@ -469,11 +489,11 @@ async function run({ label, databaseUrl, refuseFirst }) {
     stdio: [&quot;ignore&quot;, &quot;pipe&quot;, &quot;ignore&quot;],
   });
   const base = await new Promise((resolve) =&gt; child.stdout.on(&quot;data&quot;, (d) =&gt; { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }));
-  const call = async (method, p, body) =&gt; {
+  const call = async (method, p, body, extra = {}) =&gt; {
     const u = USERS.editor;
     const token = await new SignJWT({ email: u.email, name: u.name, kind: u.kind, groups: [], roles: u.roles })
       .setProtectedHeader({ alg: &quot;RS256&quot;, kid: &quot;local-dev&quot; }).setSubject(u.sub).setIssuer(portal.issuer).setAudience(APP_ID).setIssuedAt().setExpirationTime(&quot;5m&quot;).sign(portal.privateKey);
-    const res = await fetch(base + p, { method, headers: { &quot;x-vmnodes-identity&quot;: token, &quot;content-type&quot;: &quot;application/json&quot; }, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(base + p, { method, redirect: &quot;manual&quot;, headers: { &quot;x-vmnodes-identity&quot;: token, &quot;content-type&quot;: &quot;application/json&quot;, ...extra }, body: typeof body === &quot;string&quot; ? body : body ? JSON.stringify(body) : undefined });
     const text = await res.text();
     return { status: res.status, text, json: () =&gt; JSON.parse(text) };
   };
@@ -503,6 +523,19 @@ async function run({ label, databaseUrl, refuseFirst }) {
   else check(&quot;memory + upsert: a cancelled booking stays shared (this is why a database is needed)&quot;, platform.state.records.has(id), true);
   check(&quot;the publish mode follows where the data is kept&quot;, [...new Set(platform.state.requests.filter((r) =&gt; r.url === &quot;/v1/publish/records&quot;).map((r) =&gt; r.body.mode))], [databaseUrl ? &quot;snapshot&quot; : &quot;upsert&quot;]);
 
+  // A form on another app&#39;s page must not book a room as the signed-in person.
+  const form = () =&gt; new URLSearchParams({ room: &quot;From elsewhere&quot;, startsAt: stamp(48), endsAt: stamp(49), organiserName: &quot;Cross Carl&quot;, organiserPhone: &quot;&quot; }).toString();
+  const formPost = (extra) =&gt; call(&quot;POST&quot;, &quot;/bookings&quot;, form(), { &quot;content-type&quot;: &quot;application/x-www-form-urlencoded&quot;, ...extra });
+  const viaBrowser = async (extra) =&gt; (await formPost(extra)).status;
+  check(&quot;a form post from ANOTHER site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; }), 403);
+  const refusal = (await formPost({ &quot;sec-fetch-site&quot;: &quot;cross-site&quot; })).text;
+  check(&quot;the refusal page says nothing was changed, and does not say a role is missing&quot;, [refusal.includes(&quot;Nothing was changed&quot;), refusal.includes(&quot;Ask whoever runs it&quot;)], [true, false]);
+  check(&quot;a form post from a SIBLING app on the same site -&gt; 403&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-site&quot; }), 403);
+  check(&quot;a post with a foreign Origin and no fetch metadata -&gt; 403&quot;, await viaBrowser({ origin: &quot;https://evil.example&quot; }), 403);
+  check(&quot;...and none of those three posts was saved&quot;, (await call(&quot;GET&quot;, &quot;/api/bookings&quot;)).json().items.filter((b) =&gt; b.room === &quot;From elsewhere&quot;).length, 0);
+  check(&quot;CONTROL: the app&#39;s own form (same-origin) still posts -&gt; 303&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-origin&quot; }), 303);
+  await sleep(300); // let the publish that booking triggers finish before the pretend platform stops
+
   child.kill(); portal.server.close(); platform.server.close();
 }
 
@@ -510,13 +543,13 @@ async function run({ label, databaseUrl, refuseFirst }) {
   await run({ label: &quot;kept in memory&quot;, refuseFirst: 2 });
   if (process.env.TEST_DATABASE_URL) await run({ label: &quot;kept in Postgres&quot;, databaseUrl: process.env.TEST_DATABASE_URL, refuseFirst: 0 });
   else console.log(&quot;\nSKIP postgres run: set TEST_DATABASE_URL to an empty scratch database to run it&quot;);
-  const FLOOR = process.env.TEST_DATABASE_URL ? 18 : 10;
+  const FLOOR = process.env.TEST_DATABASE_URL ? 32 : 16;
   if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
   console.log(`\npassed=${pass} failed=${fail}`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((e) =&gt; { console.error(&quot;test crashed:&quot;, e); process.exit(1); });</code></pre>
 <pre data-lang="bash"><code>npm test</code></pre>
-<p>It worked when the last line is <code>passed=11 failed=0</code>. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database (<a href="/how-to/test-with-a-scratch-database">Test with a scratch database</a> starts one): <code>TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test</code> ends <code>passed=22 failed=0</code>. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.</p>
+<p>It worked when the last line is <code>passed=17 failed=0</code>. To also check the database path, where a cancelled booking disappears from what is shared, give it an empty scratch Postgres database (<a href="/how-to/test-with-a-scratch-database">Test with a scratch database</a> starts one): <code>TEST_DATABASE_URL=postgres://localhost/rooms_scratch npm test</code> ends <code>passed=34 failed=0</code>. The pretend platform is not the real one: it proves what your app sends, not what VMnodes does with it.</p>
 <h2 id="8-try-it-on-your-computer">8. Try it on your computer<a class="d-anchor" href="#8-try-it-on-your-computer" aria-label="Link to this section">#</a></h2>
 <pre data-lang="bash"><code>npm run dev</code></pre>
 <p>Open <code>http://127.0.0.1:4100</code>.</p>
@@ -531,7 +564,7 @@ async function run({ label, databaseUrl, refuseFirst }) {
 <p>For each field, press <strong>Turn on</strong>. A page asks &quot;Share room?&quot;, says who could read it, and has a <strong>Share room</strong> button. Press it. It worked when the field&#39;s row reads <strong>Shared</strong> and offers <strong>Turn off</strong>. Do the same for <code>startsAt</code> and <code>endsAt</code>.</p>
 <p>Turning a field on does not fill in records that were published before. This app sends every upcoming booking at each start-up and after every booking or cancellation, so make one more booking and the values are sent.</p>
 <h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
-<ol><li><code>npm test</code> ends <code>passed=11 failed=0</code>, and with <code>TEST_DATABASE_URL</code> set to an empty scratch database, <code>passed=22 failed=0</code>.</li><li>Locally, sharing is off and says so. With <code>npm run dev</code> running, this prints <code>&quot;publishing&quot;:false</code>:<pre data-lang="bash"><code>curl -s http://127.0.0.1:3000/health</code></pre></li><li>After the launch, <code>https://meeting-rooms.acme.vmnodes.com/health</code>, opened in the browser you are signed in with, shows <code>&quot;publishing&quot;:true</code> and <code>&quot;storage&quot;:&quot;postgres&quot;</code>.</li><li>On the <strong>Shares</strong> tab there are exactly three rows, <code>room</code>, <code>startsAt</code> and <code>endsAt</code>, and none for <code>organiserName</code> or <code>organiserPhone</code>.</li><li>After the administrator turns the three fields on, each reads <strong>Shared</strong>.</li><li>Cancel a booking in the live app. The next publish is a snapshot, so the booking leaves the shared copy. You cannot read the copy back from a portal app yourself, because reading needs your VMnodes contact (see <a href="/how-to/read-shared-data">Read shared data</a>), so the database run of the test in step 7 is your proof.</li></ol>
+<ol><li><code>npm test</code> ends <code>passed=17 failed=0</code>, and with <code>TEST_DATABASE_URL</code> set to an empty scratch database, <code>passed=34 failed=0</code>.</li><li>Locally, sharing is off and says so. With <code>npm run dev</code> running, this prints <code>&quot;publishing&quot;:false</code>:<pre data-lang="bash"><code>curl -s http://127.0.0.1:3000/health</code></pre></li><li>After the launch, <code>https://meeting-rooms.acme.vmnodes.com/health</code>, opened in the browser you are signed in with, shows <code>&quot;publishing&quot;:true</code> and <code>&quot;storage&quot;:&quot;postgres&quot;</code>.</li><li>On the <strong>Shares</strong> tab there are exactly three rows, <code>room</code>, <code>startsAt</code> and <code>endsAt</code>, and none for <code>organiserName</code> or <code>organiserPhone</code>.</li><li>After the administrator turns the three fields on, each reads <strong>Shared</strong>.</li><li>Cancel a booking in the live app. The next publish is a snapshot, so the booking leaves the shared copy. You cannot read the copy back from a portal app yourself, because reading needs your VMnodes contact (see <a href="/how-to/read-shared-data">Read shared data</a>), so the database run of the test in step 7 is your proof.</li></ol>
 <h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
 <ul><li><strong>Times in UTC on the page.</strong> This example types and shows times in UTC to stay short. A real booking form takes the business&#39;s local time: see <a href="/how-to/dates-and-time-zones">Dates and time zones</a>. Keep publishing instants as UTC strings ending in <code>Z</code>.</li></ul>
 <ul><li><strong>Three names for one record type.</strong> <code>vmnodes.json</code> says <code>booking/v1</code>, the API call says <code>meeting-rooms.booking</code>, and the <strong>Shares</strong> tab shows <code>meeting-rooms.booking</code>. Take the app&#39;s name from <code>VMNODES_APP_NAME</code>, as <code>server.js</code> does, and never type it in. A wrong name is refused with <code>applications publish only in their own namespace — &#39;&lt;entity&gt;&#39; must start with &#39;&lt;app&gt;.&#39;</code>.</li><li><strong>Declare the entity before you publish it.</strong> An entity that <code>vmnodes.json</code> does not list is refused with <code>publish/not-declared</code>. The same code appears on a first launch if the app publishes before VMnodes has marked it live, so <code>server.js</code> retries at start-up and also publishes after every booking.</li><li><strong><code>snapshot</code> with data in memory deletes everything.</strong> A restart empties memory, and the next snapshot tells every reader the bookings are gone. Make the choice in one place, <code>storageFor</code>, and never set the mode anywhere else.</li><li><strong>Never send part of a snapshot.</strong> A snapshot removes every record missing from it. The app refuses to send more than 1000 records at once, because the platform accepts at most 1000 per call and a partial list would delete the rest. This app shares only upcoming bookings, so a booking that has ended leaves the shared copy at the next publish.</li><li><strong>Publish one at a time.</strong> Two snapshots in flight can arrive out of order, and the older list then deletes the newest booking. <code>publishLatest</code> chains them and reads the list when its turn comes.</li><li><strong>Build the payload from the list of shared fields.</strong> <code>payload: { ...booking }</code> sends the organiser&#39;s phone number the day someone adds a column. <code>FIELDS</code> is an allowlist: a field that is not in it is never sent. The test proves it with a value that cannot be mistaken for anything else.</li><li><strong>Publishing a field does not share it.</strong> A field starts <strong>Not shared</strong> until an administrator presses <strong>Turn on</strong>. Pressing <strong>Turn off</strong> later removes the stored values for that field at once. Your own data is untouched.</li><li><strong>Do not share contact details.</strong> A field that looks like one carries the badge &quot;Contact detail&quot; and &quot;Usually kept private.&quot; Leave names, phone numbers and emails out of <code>FIELDS</code> unless the customer asks.</li><li><strong>Describing the entity again with fewer fields replaces the list.</strong> Taking a field out of <code>FIELDS</code> makes it unreadable for everyone. The app describes the entity once per start.</li><li><strong>Removing the entity from <code>publishes</code> retires it.</strong> Afterwards a publish is refused with <code>This app no longer shares &#39;&lt;entity&gt;&#39;. Nothing new is accepted for it.</code> Add it back, update the app, and publish again.</li><li><strong>Treat the token like a password.</strong> It arrives as <code>VMNODES_PUBLISH_TOKEN</code>. Never commit it and never log it. An app that lists nothing under <code>publishes</code> has no token.</li><li><strong>Nobody can read what you share until a reader is given access.</strong> Switching fields on is half of it. See <a href="/how-to/read-shared-data">Read shared data</a>.</li></ul>

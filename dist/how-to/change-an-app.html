@@ -33,7 +33,7 @@ grep -n &#39;&quot;test&quot;&#39; package.json</code></pre>
 <h2 id="2-run-the-tests-before-you-touch-anything">2. Run the tests before you touch anything<a class="d-anchor" href="#2-run-the-tests-before-you-touch-anything" aria-label="Link to this section">#</a></h2>
 <pre data-lang="bash"><code>npm install
 npm test</code></pre>
-<p>It worked when the last line is <code>passed=25 failed=0</code>. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.</p>
+<p>It worked when the last line is <code>passed=31 failed=0</code>. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.</p>
 <h2 id="3-find-out-what-is-running-now">3. Find out what is running now<a class="d-anchor" href="#3-find-out-what-is-running-now" aria-label="Link to this section">#</a></h2>
 <p>Someone may have pushed a commit that was never put online. Compare what the app says it runs with what the repository holds.</p>
 <pre data-lang="bash"><code>git rev-parse HEAD</code></pre>
@@ -116,7 +116,7 @@ npm test</code></pre>
  &lt;ul id=&quot;links&quot;&gt;${items}&lt;/ul&gt;`);
  }
  
-@@ -78,19 +84,25 @@
+@@ -98,19 +104,25 @@
    const user = await identity.currentUser(req.headers);
    identity.requireRole(user, EDITOR_ROLE);
  
@@ -153,12 +153,12 @@ npm test</code></pre>
 <p>Add these checks to <code>test/smoke.js</code>. They test the new rule in both directions: a known category is accepted and an unknown one is refused, the filter returns only that category, and an unknown filter returns nothing rather than everything.</p>
 <pre data-lang="diff"><code>--- a/test/smoke.js
 +++ b/test/smoke.js
-@@ -102,13 +102,28 @@
-   check(&quot;the form post answers 303 back to the list&quot;, posted.status, 303);
-   check(&quot;...and the new link is listed&quot;, (await json(await editor(), &quot;GET&quot;, &quot;/api/links&quot;)).json().items.length, 2);
+@@ -115,13 +115,28 @@
+   check(&quot;...and none of those three posts was saved&quot;, crossSiteLinks, 0);
+   check(&quot;CONTROL: the app&#39;s own form (same-origin) still posts -&gt; 303&quot;, await viaBrowser({ &quot;sec-fetch-site&quot;: &quot;same-origin&quot; }), 303);
  
--  // --- 7. A database that cannot be reached stops the app; it never falls back --
-+  // --- 7. Categories ------------------------------------------------------------
+-  // --- 8. A database that cannot be reached stops the app; it never falls back --
++  // --- 8. Categories ------------------------------------------------------------
 +  const rota = (await json(await editor(), &quot;GET&quot;, &quot;/api/links&quot;)).json().items.find((l) =&gt; l.title.startsWith(&quot;Rota&quot;));
 +  check(&quot;a link added without a category is &#39;General&#39;&quot;, rota.category, &quot;General&quot;);
 +  const forms = await json(await editor(), &quot;POST&quot;, &quot;/api/links&quot;, { title: &quot;Leave form&quot;, url: &quot;https://example.com/leave&quot;, category: &quot;Forms&quot; });
@@ -173,20 +173,20 @@ npm test</code></pre>
 +  const selectHtml = (/&lt;select id=&quot;category&quot;[^&gt;]*&gt;([\s\S]*?)&lt;\/select&gt;/.exec((await request(`${portal.issuer}/`)).body) || [])[1] || &quot;&quot;;
 +  check(&quot;the page offers every category in a select&quot;, [&quot;General&quot;, &quot;Forms&quot;, &quot;Training&quot;, &quot;Suppliers&quot;].every((c) =&gt; selectHtml.includes(`&gt;${c}&lt;/option&gt;`)), true);
 +
-+  // --- 8. A database that cannot be reached stops the app; it never falls back --
++  // --- 9. A database that cannot be reached stops the app; it never falls back --
    const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: &quot;postgres://links@127.0.0.1:1/links&quot; });
    check(&quot;with DATABASE_URL set and no database, the app refuses to START&quot;, noDb.exited !== undefined &amp;&amp; noDb.exited !== 0, true);
    check(&quot;...and says it will not start without its database&quot;, /will not start without its database/.test(noDb.out()), true);
  
--  // --- 8. The count itself: zero checks run must never read as a pass ---------
--  const FLOOR = 20;
-+  // --- 9. The count itself: zero checks run must never read as a pass ---------
-+  const FLOOR = 30;
+-  // --- 9. The count itself: zero checks run must never read as a pass ---------
+-  const FLOOR = 26;
++  // --- 10. The count itself: zero checks run must never read as a pass --------
++  const FLOOR = 36;
    if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
    console.log(`\npassed=${pass} failed=${fail}`);
    finish(fail === 0 ? 0 : 1);</code></pre>
 <pre data-lang="bash"><code>npm test</code></pre>
-<p>It worked when the last line is <code>passed=33 failed=0</code>, higher than the baseline.</p>
+<p>It worked when the last line is <code>passed=39 failed=0</code>, higher than the baseline.</p>
 <h2 id="6-commit-it-without-pushing-yet">6. Commit it, without pushing yet<a class="d-anchor" href="#6-commit-it-without-pushing-yet" aria-label="Link to this section">#</a></h2>
 <pre data-lang="bash"><code>git add -A
 git commit -m &quot;Add a category to each link&quot;</code></pre>
@@ -214,7 +214,7 @@ npm run dev</code></pre>
 <p>In <strong>Console</strong>, open the app&#39;s <strong>Deployments</strong> tab and press <strong>Roll back to this</strong> on the earlier deployment. It worked when <code>/health</code> shows <code>&quot;version&quot;:&quot;0.1.0&quot;</code> and every link is still listed. The database keeps its new column. The old version never reads it, so it works against it.</p>
 <p>Then fix the problem in a new commit and update again. Do not leave the repository&#39;s default branch holding a commit you rolled back, because the next <strong>Update to latest commit</strong> will put it live again.</p>
 <h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
-<ol><li>Before the change, <code>npm test</code> ends <code>passed=25 failed=0</code>. After it, <code>passed=33 failed=0</code>.</li><li>The role list is untouched. This prints <code>unchanged</code>:<pre data-lang="bash"><code>git diff --exit-code HEAD~1 -- vmnodes.json &amp;&amp; echo unchanged</code></pre></li><li>With <code>npm run dev</code> running against a scratch database that version 1 filled, a link written by the old version reads <code>&quot;category&quot;:&quot;General&quot;</code>, and a bad category is refused. This prints <code>{&quot;error&quot;:&quot;category must be one of: General, Forms, Training, Suppliers&quot;}</code>:<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;title&quot;:&quot;A&quot;,&quot;url&quot;:&quot;https://example.com&quot;,&quot;category&quot;:&quot;Banana&quot;}&#39; http://127.0.0.1:4100/api/links</code></pre></li><li>After the update, <code>https://link-list.acme.vmnodes.com/health</code>, opened in the browser you are signed in with, shows <code>&quot;version&quot;:&quot;0.2.0&quot;</code>, and its <code>buildCommit</code> equals the output of <code>git rev-parse HEAD</code>.</li><li>On the live app, the links that existed before the update are all listed and all read <strong>General</strong>. Add a link with the category <strong>Forms</strong>: choosing <strong>Forms</strong> in the filter row shows only it.</li></ol>
+<ol><li>Before the change, <code>npm test</code> ends <code>passed=31 failed=0</code>. After it, <code>passed=39 failed=0</code>.</li><li>The role list is untouched. This prints <code>unchanged</code>:<pre data-lang="bash"><code>git diff --exit-code HEAD~1 -- vmnodes.json &amp;&amp; echo unchanged</code></pre></li><li>With <code>npm run dev</code> running against a scratch database that version 1 filled, a link written by the old version reads <code>&quot;category&quot;:&quot;General&quot;</code>, and a bad category is refused. This prints <code>{&quot;error&quot;:&quot;category must be one of: General, Forms, Training, Suppliers&quot;}</code>:<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;title&quot;:&quot;A&quot;,&quot;url&quot;:&quot;https://example.com&quot;,&quot;category&quot;:&quot;Banana&quot;}&#39; http://127.0.0.1:4100/api/links</code></pre></li><li>After the update, <code>https://link-list.acme.vmnodes.com/health</code>, opened in the browser you are signed in with, shows <code>&quot;version&quot;:&quot;0.2.0&quot;</code>, and its <code>buildCommit</code> equals the output of <code>git rev-parse HEAD</code>.</li><li>On the live app, the links that existed before the update are all listed and all read <strong>General</strong>. Add a link with the category <strong>Forms</strong>: choosing <strong>Forms</strong> in the filter row shows only it.</li></ol>
 <h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
 <ul><li><strong>Check what is live before you change anything.</strong> The repository may be ahead of the app, and your update then puts live work you did not write. Compare <code>buildCommit</code> with <code>git rev-parse HEAD</code>.</li><li><strong>Know whether the app keeps its data before you press the button.</strong> Without <code>&quot;database&quot;: true</code> an update clears everything the app held, and the <strong>Deployment</strong> card warns &quot;Updating replaces your app&#39;s container. Anything not saved in its database is cleared.&quot; Read the card first.</li><li><strong>Never rename or remove a role in use.</strong> Taking a role out of <code>vmnodes.json</code> retires it, and a new name is held by nobody, so the people who used the app are locked out of everything that checks it. Add the new role, give it with <strong>Change roles</strong>, and retire the old one in a later update. See <a href="/concepts/roles">Roles</a>.</li><li><strong>An update does not give anyone a role the new commit adds.</strong> If you add a role, give it on the <strong>People</strong> tab with <strong>Change roles</strong>.</li><li><strong>Change the database by adding to the end of <code>MIGRATIONS</code>.</strong> Do not edit an entry that has shipped, and do not drop or rename a column. The rules and the test for them are in <a href="/how-to/keep-data-through-updates">Keep data through updates</a>.</li><li><strong>Give a new column a default.</strong> <code>add column ... not null</code> with no default fails on a table that already has rows, and a failed change stops the app and the update.</li><li><strong>Validate on the server.</strong> The new <code>&lt;select&gt;</code> is a courtesy; a request that bypasses the form can send any category, so <code>server.js</code> checks the list.</li><li><strong>Add a new file to the <code>Dockerfile</code>&#39;s <code>COPY</code> line.</strong> A file the server loads that is not copied builds, then fails with &quot;Your app stopped while starting.&quot;</li><li><strong>Do not change what the platform relies on.</strong> Keep <code>GET /health</code> answering with no sign-in and the app listening on port 3000.</li><li><strong>One thing per update.</strong> A change you cannot undo alone, such as a drive-by fix mixed in, makes a roll back lose it too.</li><li><strong>Only an administrator can press the button, one update at a time.</strong> If an update is already running, wait for it.</li></ul>
 <h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>

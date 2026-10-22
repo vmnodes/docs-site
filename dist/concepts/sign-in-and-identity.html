@@ -45,6 +45,21 @@
 <p>Collapsing 503 into 401 sends a person to sign in again for a problem that is not theirs. The starter&#39;s handler keeps the status the package gives:</p>
 <pre data-lang="js"><code>const status = err instanceof IdentityError ? err.status : err instanceof SyntaxError ? 400 : 500;</code></pre>
 <p>Do not confuse the two 403s. The gateway&#39;s &quot;Not authorised&quot; page means the person has no access to the app and your app never ran. A 403 from <code>requireRole</code> means the person is in the app but lacks a role. See <a href="/concepts/roles">Roles</a>.</p>
+<h2 id="refuse-changes-sent-from-another-site">Refuse changes sent from another site<a class="d-anchor" href="#refuse-changes-sent-from-another-site" aria-label="Link to this section">#</a></h2>
+<p>A page on another site can submit a form to your app, and the browser sends your app&#39;s sign-in with it. Your app then sees a valid identity header and acts as that person. Every app on <code>vmnodes.com</code>, in every org, counts as the same &quot;site&quot;, so the sign-in cookie&#39;s <code>SameSite</code> setting does not stop a page on another app. Your app must refuse such a request itself, on every route that changes something.</p>
+<p>The browser says where a request came from in the <code>Sec-Fetch-Site</code> header. Refuse a change unless it reads <code>same-origin</code> (or <code>none</code>, for something the person typed in themselves). An older browser sends <code>Origin</code> instead; refuse a change whose <code>Origin</code> is not your app&#39;s own address. These lines are the starter&#39;s, called before anything else for every request except <code>/health</code>:</p>
+<pre data-lang="js"><code>const CROSS_SITE_REFUSED = &quot;a change sent from another site was refused&quot;;
+function refuseCrossSiteWrite(req) {
+  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot; || req.method === &quot;OPTIONS&quot;) return;
+  const site = req.headers[&quot;sec-fetch-site&quot;];
+  if (site) {
+    if (site !== &quot;same-origin&quot; &amp;&amp; site !== &quot;none&quot;) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin &amp;&amp; origin !== `https://${req.headers.host}`) throw new IdentityError(CROSS_SITE_REFUSED, 403);
+}</code></pre>
+<ul><li><strong><code>same-site</code> is not safe here.</strong> It means &quot;another app on vmnodes.com&quot;, which is exactly the case to refuse.</li><li><strong>Never change anything on a <code>GET</code>.</strong> A link or an image can send a <code>GET</code> from anywhere, with the person&#39;s sign-in.</li><li><strong>It worked when</strong> a test that posts with <code>Sec-Fetch-Site: cross-site</code> gets 403 and saves nothing, and the same post with <code>same-origin</code> succeeds. The starter&#39;s <code>npm test</code> checks both.</li></ul>
 <h2 id="health-has-no-sign-in"><code>/health</code> has no sign-in<a class="d-anchor" href="#health-has-no-sign-in" aria-label="Link to this section">#</a></h2>
 <p>The platform checks that your app is alive by calling <code>/health</code> on the container with nobody signed in. If <code>/health</code> required an identity, that check would always fail and the launch would never go live. Serve it before any identity check. A person who opens <code>/health</code> in a browser still passes through the gateway&#39;s sign-in first.</p>
 <h2 id="test-locally-without-a-switch">Test locally without a switch<a class="d-anchor" href="#test-locally-without-a-switch" aria-label="Link to this section">#</a></h2>
@@ -53,7 +68,7 @@
 <ul><li><a href="/concepts/roles">Roles</a></li><li><a href="/reference/identity-sdk">The identity package</a></li><li><a href="/reference/environment">Environment variables</a></li><li><a href="/getting-started">Getting started</a></li></ul>
   <p class="d-meta"><a href="/concepts/sign-in-and-identity.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
   </article></main>
-  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#the-gateway-signs-people-in">The gateway signs people in</a></li><li class="l2"><a href="#the-identity-header">The identity header</a></li><li class="l2"><a href="#verify-the-header-do-not-just-decode-it">Verify the header, do not just decode it</a></li><li class="l2"><a href="#settings-the-platform-gives-your-app">Settings the platform gives your app</a></li><li class="l2"><a href="#401-403-and-503-mean-different-things">401, 403 and 503 mean different things</a></li><li class="l2"><a href="#health-has-no-sign-in">/health has no sign-in</a></li><li class="l2"><a href="#test-locally-without-a-switch">Test locally without a switch</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#the-gateway-signs-people-in">The gateway signs people in</a></li><li class="l2"><a href="#the-identity-header">The identity header</a></li><li class="l2"><a href="#verify-the-header-do-not-just-decode-it">Verify the header, do not just decode it</a></li><li class="l2"><a href="#settings-the-platform-gives-your-app">Settings the platform gives your app</a></li><li class="l2"><a href="#401-403-and-503-mean-different-things">401, 403 and 503 mean different things</a></li><li class="l2"><a href="#refuse-changes-sent-from-another-site">Refuse changes sent from another site</a></li><li class="l2"><a href="#health-has-no-sign-in">/health has no sign-in</a></li><li class="l2"><a href="#test-locally-without-a-switch">Test locally without a switch</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
 </div>
 </body>
 </html>
