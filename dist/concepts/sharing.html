@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sharing · VMnodes docs</title>
+<meta name="description" content="Understand how an app shares records with other apps in its org, and who decides which fields leave. Read this before you publish anything, and before you plan an app that needs another app&#39;s data.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/concepts/sharing.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing" aria-current="page">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="sharing">Sharing</h1>
+<p>Understand how an app shares records with other apps in its org, and who decides which fields leave. Read this before you publish anything, and before you plan an app that needs another app&#39;s data.</p>
+<p>To share is to publish a curated copy of your records. Other apps cannot read your database, so you describe a record type once, send records that match it, and an administrator chooses which fields other apps may read. A shared record type is an entity, named <code>&lt;app&gt;.&lt;thing&gt;</code>, for example <code>acme-notes.note</code>.</p>
+<h2 id="the-three-names-and-the-trap-in-them">The three names, and the trap in them<a class="d-anchor" href="#the-three-names-and-the-trap-in-them" aria-label="Link to this section">#</a></h2>
+<p>One record type is written three ways. Writing the wrong one is the commonest mistake.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Where</th><th scope="col">Written as</th><th scope="col">Example</th></tr></thead><tbody><tr><td><code>publishes</code> in <code>vmnodes.json</code></td><td><code>&lt;thing&gt;/vN</code>: no app name, no dot</td><td><code>&quot;publishes&quot;: [&quot;note/v1&quot;]</code></td></tr><tr><td>The publish API&#39;s <code>entity</code> field</td><td><code>&lt;app&gt;.&lt;thing&gt;</code>: no version</td><td><code>acme-notes.note</code></td></tr><tr><td>The Shares tab</td><td><code>&lt;app&gt;.&lt;thing&gt;</code></td><td><code>acme-notes.note</code></td></tr></tbody></table></div>
+<p>The app name in the API call is the name the app was put online as, so the app must read it from <code>VMNODES_APP_NAME</code> and not type it in. The starter does:</p>
+<pre data-lang="js"><code>const APP_NAME = process.env.VMNODES_APP_NAME || &quot;starter&quot;;</code></pre>
+<pre data-lang="js"><code>// vmnodes.json declares &quot;note/v1&quot;; the platform puts the app&#39;s own name in front.
+const entity = `${appName}.note`;</code></pre>
+<p>A wrong app name is refused with <code>applications publish only in their own namespace — &#39;&lt;entity&gt;&#39; must start with &#39;&lt;appName&gt;.&#39;</code> (<code>publish/namespace-denied</code>). An entity that <code>vmnodes.json</code> does not list is refused with <code>publish/not-declared</code>. The version is sent separately and defaults to 1, which matches <code>note/v1</code>.</p>
+<h2 id="turn-publishing-on">Turn publishing on<a class="d-anchor" href="#turn-publishing-on" aria-label="Link to this section">#</a></h2>
+<ol><li>List the entity in <code>vmnodes.json</code>: <code>&quot;publishes&quot;: [&quot;note/v1&quot;]</code>. The local name is lowercase letters, digits and hyphens, starting with a letter, and the version is <code>v</code> and a whole number from 1.</li><li>Deploy to production. When <code>publishes</code> is not empty, VMnodes passes two settings to the app before it starts: <code>VMNODES_API_URL</code>, where to send calls, and <code>VMNODES_PUBLISH_TOKEN</code>, which proves the calls come from your app. They are never set when you run locally, so the starter turns publishing off and <code>/health</code> reports <code>&quot;publishing&quot;: false</code>. Treat the token like a password: never commit it or log it.</li><li>Make the two calls below from your app.</li></ol>
+<p>The token is revoked at the deploy where <code>publishes</code> becomes <code>[]</code>. Removing one entity from <code>publishes</code> retires it at the next production deploy; sending it records afterwards is refused with <code>This app no longer shares &#39;&lt;entity&gt;&#39;. Nothing new is accepted for it.</code></p>
+<h2 id="the-two-calls">The two calls<a class="d-anchor" href="#the-two-calls" aria-label="Link to this section">#</a></h2>
+<p>Both go to <code>VMNODES_API_URL</code> with <code>Authorization: Bearer &lt;VMNODES_PUBLISH_TOKEN&gt;</code>. These are the starter&#39;s, from <code>publish.js</code>. First describe the record type, once:</p>
+<pre data-lang="js"><code>await call(&quot;/v1/publish/entities&quot;, {
+  entity,
+  description: &quot;Notes posted on the team noticeboard.&quot;,
+  classification: &quot;internal&quot;,
+  queryableFields: [
+    { name: &quot;text&quot;, type: &quot;string&quot; },
+    { name: &quot;author&quot;, type: &quot;string&quot; },
+    { name: &quot;postedAt&quot;, type: &quot;timestamp&quot; },
+  ],
+});</code></pre>
+<p>Then send records:</p>
+<pre data-lang="js"><code>await call(&quot;/v1/publish/records&quot;, {
+  entity,
+  mode,
+  records: notes.map((n) =&gt; ({
+    recordKey: n.id,
+    payload: { text: n.text, author: n.authorName, postedAt: n.postedAt },
+    sourceUpdatedAt: n.postedAt,
+  })),
+});</code></pre>
+<p>Field types are <code>string</code>, <code>number</code>, <code>boolean</code> and <code>timestamp</code>. A call takes at most 1000 records. Every call and error is in <a href="/reference/publish-api">the publish API</a>.</p>
+<blockquote><p><strong>Trap:</strong> register after the app is live, not at start-up. The platform checks the entity against the live deployment&#39;s <code>vmnodes.json</code>, and during the first deploy there is no live deployment yet, so a call made while the app boots fails with <code>publish/not-declared</code>. The starter describes the entity on its first publish, which happens when someone posts a note.</p></blockquote>
+<blockquote><p><strong>Trap:</strong> re-describing an entity with a shorter <code>queryableFields</code> list replaces the old list. A field you leave out stops being queryable for everyone.</p></blockquote>
+<h2 id="upsert-and-snapshot"><code>upsert</code> and <code>snapshot</code><a class="d-anchor" href="#upsert-and-snapshot" aria-label="Link to this section">#</a></h2>
+<p><code>mode</code> says what happens to records you do not send this time.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Mode</th><th scope="col">Does</th><th scope="col">Use it when</th></tr></thead><tbody><tr><td><code>upsert</code></td><td>adds and updates the records you send, and never removes one</td><td>the data is kept in memory, or you send only what changed</td></tr><tr><td><code>snapshot</code></td><td>also removes every record missing from this batch</td><td>the list you send is the complete set, read from the app&#39;s database</td></tr></tbody></table></div>
+<blockquote><p><strong>Trap:</strong> <code>snapshot</code> with data kept in memory deletes everything. A restart empties memory, and the next snapshot tells the platform every record is gone, for every app reading it. The starter picks the mode in one place, <code>storageFor</code>, from <code>DATABASE_URL</code>. There is no way to remove one record alone: resend the whole set under <code>snapshot</code>, without it.</p></blockquote>
+<p>A second quiet version: two <code>snapshot</code> publishes in flight at once can arrive out of order, and the older list deletes the newest record. The starter publishes one at a time and reads the list when its turn comes:</p>
+<pre data-lang="js"><code>let publishing = Promise.resolve();
+function publishLatest() {
+  publishing = publishing
+    .then(async () =&gt; publisher.publishAll(await store.list()))
+    .catch((e) =&gt; console.error(&quot;publish failed:&quot;, e.message));
+  return publishing;
+}</code></pre>
+<h2 id="the-shares-tab-decides-what-leaves">The Shares tab decides what leaves<a class="d-anchor" href="#the-shares-tab-decides-what-leaves" aria-label="Link to this section">#</a></h2>
+<p>An administrator opens the app&#39;s <strong>Shares</strong> tab. Each shared record type is a card with its description and entity name, and one row per field.</p>
+<ul><li><strong>Fields are not shared until an administrator switches them on.</strong> A field of an app&#39;s record type starts <strong>Not shared</strong>, with the badge &quot;Waiting for your decision&quot;, and the tab says &quot;N fields are waiting for your decision.&quot; Publishing a field does not share it.</li><li>Press <strong>Turn on</strong> on a field. A page asks &quot;Share &lt;field&gt;?&quot;, names who would be able to read it (or says no app reads it yet), and has a button <strong>Share &lt;field&gt;</strong>. A field that looks like a contact detail carries the badge &quot;Contact detail&quot; and &quot;Usually kept private.&quot;</li><li>Press <strong>Turn off</strong> on a shared field. This takes effect at once and removes that field&#39;s values from the platform&#39;s copy of the records. Your app&#39;s own data is untouched.</li><li>The card&#39;s <strong>Who can read this</strong> list names the apps, groups and people who can read the record type.</li><li>An app that publishes nothing shows &quot;Your app doesn&#39;t share anything yet.&quot;</li></ul>
+<p>Nobody can read a shared record type until an administrator has switched on its fields and a reader has been given access.</p>
+<h2 id="reading-what-others-share">Reading what others share<a class="d-anchor" href="#reading-what-others-share" aria-label="Link to this section">#</a></h2>
+<p>Reading another app&#39;s records is not self-serve. A reader needs access created for it by your VMnodes contact, and there is no key in <code>vmnodes.json</code> to ask for it. The <strong>Shares</strong> tab does not grant it.</p>
+<blockquote><p><strong>Coming:</strong> reading another app&#39;s shared data from a portal app. Today it needs your VMnodes contact.</p></blockquote>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/how-to/share-data">Share data</a></li><li><a href="/how-to/read-shared-data">Read shared data</a></li><li><a href="/reference/publish-api">The publish API</a></li><li><a href="/concepts/data">Data</a></li></ul>
+  <p class="d-meta"><a href="/concepts/sharing.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#the-three-names-and-the-trap-in-them">The three names, and the trap in them</a></li><li class="l2"><a href="#turn-publishing-on">Turn publishing on</a></li><li class="l2"><a href="#the-two-calls">The two calls</a></li><li class="l2"><a href="#upsert-and-snapshot">upsert and snapshot</a></li><li class="l2"><a href="#the-shares-tab-decides-what-leaves">The Shares tab decides what leaves</a></li><li class="l2"><a href="#reading-what-others-share">Reading what others share</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

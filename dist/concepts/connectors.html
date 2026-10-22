@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connectors · VMnodes docs</title>
+<meta name="description" content="Understand what a connector is and which ones an administrator can set up in the portal today. Read this when your app needs to read a private repository, or needs mail, AI or a directory of people.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/concepts/connectors.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors" aria-current="page">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="connectors">Connectors</h1>
+<p>Understand what a connector is and which ones an administrator can set up in the portal today. Read this when your app needs to read a private repository, or needs mail, AI or a directory of people.</p>
+<p>A connector links your org to an outside service. GitHub is the only connector an administrator connects in the portal. Mail, AI and directory need your VMnodes contact.</p>
+<h2 id="github">GitHub<a class="d-anchor" href="#github" aria-label="Link to this section">#</a></h2>
+<p>GitHub is how VMnodes reads a private repository when it builds your app. A public repository needs no connector: paste its <code>https://</code> address.</p>
+<p><strong>Connect GitHub</strong> appears on the <strong>Put an app online</strong> page, in the section <strong>1. Where is the code?</strong>, while the org has no GitHub connection that can read a repository. Only an administrator sees that page.</p>
+<ol><li>Press <strong>Connect GitHub</strong>.</li><li>On GitHub&#39;s own screen, install VMnodes Builds against the repository, or the whole account, and you are brought back.</li><li>The page now reads &quot;GitHub is connected as&quot; and the account name, and a <strong>Repository</strong> list shows the repositories VMnodes can read. It lists the first 100. For others, open <strong>Can&#39;t see your repo? Paste its URL</strong>.</li></ol>
+<p>It worked when your private repository is in the <strong>Repository</strong> list.</p>
+<ul><li><strong>One GitHub account connects to one org.</strong> A second org that tries the same account is refused with &quot;This GitHub account is already connected to a different organisation on VMnodes.&quot; and is not told which org holds it. Ask your VMnodes contact.</li><li><strong>A GitHub organisation owner may need to approve first.</strong> You see &quot;Your GitHub organisation owner needs to approve VMnodes Builds. Once they have, press Connect again.&quot; Press <strong>Connect GitHub</strong> again after they have.</li><li><strong>A private repository must be given to VMnodes Builds on GitHub</strong> before it appears in the list. If a launch says &quot;We can&#39;t read that repository. If it&#39;s private, connect GitHub first, then try again.&quot;, connect GitHub or give the app access to that repository.</li><li><strong>Never put a username, password or token in a repository address.</strong> It is refused with &quot;Remove the username, password or token from the repository URL. Private repositories connect through GitHub instead.&quot; Use <strong>Connect GitHub</strong>.</li><li><strong>Disconnecting GitHub is not possible in the portal today.</strong> Ask your VMnodes contact.</li></ul>
+<p>An update reads the same repository through the same connection, so the connection must stay in place for <strong>Update to latest commit</strong> to work on a private repository.</p>
+<h2 id="mail-ai-and-directory">Mail, AI and directory<a class="d-anchor" href="#mail-ai-and-directory" aria-label="Link to this section">#</a></h2>
+<p>Sending mail, asking an AI model to complete text, and looking up or inviting people in the org&#39;s directory are not available to an app you put online from the portal. Your app receives no setting for them. Ask your VMnodes contact if your app needs one of them.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/getting-started">Getting started</a></li><li><a href="/concepts/apps">Apps</a></li><li><a href="/concepts/orgs-and-people">Orgs and people</a></li><li><a href="/reference/limits">Limits</a></li></ul>
+  <p class="d-meta"><a href="/concepts/connectors.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#github">GitHub</a></li><li class="l2"><a href="#mail-ai-and-directory">Mail, AI and directory</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

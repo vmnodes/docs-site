@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actions and approvals · VMnodes docs</title>
+<meta name="description" content="Actions are the only write path across apps: a caller proposes a typed action, the action&#39;s approval policy decides whether it queues at once or waits for a different person to approve, and the result is polled by invocation id. Plans chain several actions behind one approval.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/actions.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="actions-and-approvals">Actions and approvals</h1>
+<p>Actions are the only write path across apps: a caller proposes a typed action, the action&#39;s approval policy decides whether it queues at once or waits for a different person to approve, and the result is polled by invocation id. Plans chain several actions behind one approval.</p>
+<h2 id="list-actions">List actions<a class="d-anchor" href="#list-actions" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/actions</code></p>
+<p>Lists the registered actions the caller may propose or approve, with each input schema, risk and approval policy.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/actions&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;action&quot;: &quot;quotes.send-quote&quot;,
+    &quot;version&quot;: 1,
+    &quot;description&quot;: &quot;Email a quote to the customer&quot;,
+    &quot;risk&quot;: &quot;moderate&quot;,
+    &quot;approvalPolicy&quot;: &quot;required&quot;,
+    &quot;inputSchema&quot;: {
+      &quot;type&quot;: &quot;object&quot;,
+      &quot;properties&quot;: {
+        &quot;quoteNumber&quot;: {
+          &quot;type&quot;: &quot;string&quot;
+        }
+      },
+      &quot;required&quot;: [
+        &quot;quoteNumber&quot;
+      ]
+    },
+    &quot;derivedInputs&quot;: [],
+    &quot;canPropose&quot;: true,
+    &quot;canApprove&quot;: false
+  }
+]</code></pre>
+<p><code>risk</code> is <code>low</code>, <code>moderate</code> or <code>high</code>. <code>approvalPolicy</code> is <code>none</code> or <code>required</code>. <code>derivedInputs</code> names inputs the platform fills in from governed data; a caller cannot supply them.</p>
+<h2 id="propose-an-action">Propose an action<a class="d-anchor" href="#propose-an-action" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/actions/propose</code></p>
+<p>Proposes one action. A low-risk, pre-authorised action queues at once; one that needs approval waits for a different person. Poll the invocation for the outcome.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/actions/propose&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;action&quot;:&quot;quotes.send-quote&quot;,&quot;input&quot;:{&quot;quoteNumber&quot;:&quot;Q-1042&quot;},&quot;idempotencyKey&quot;:&quot;send-Q-1042-2026-10-22&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;action&quot;: &quot;quotes.send-quote&quot;,
+  &quot;input&quot;: {
+    &quot;quoteNumber&quot;: &quot;Q-1042&quot;
+  },
+  &quot;idempotencyKey&quot;: &quot;send-Q-1042-2026-10-22&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;invocationId&quot;: &quot;inv_01JBX3VSJ2D3QV2Z0B17EQ78VS&quot;,
+  &quot;status&quot;: &quot;proposed&quot;,
+  &quot;deduplicated&quot;: false
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>422</td><td><code>actions/denied</code></td><td><code>no propose access to &#39;&lt;action&gt;&#39;</code></td></tr><tr><td>422</td><td><code>actions/bad-input</code></td><td><code>input does not match the action schema: &lt;detail&gt;</code></td></tr><tr><td>422</td><td><code>actions/rate-limited</code></td><td><code>&#39;&lt;action&gt;&#39; allows &lt;n&gt; proposals per hour</code></td></tr></tbody></table></div>
+<p><code>status</code> is <code>proposed</code> (waiting for approval) or <code>queued</code>. <code>input</code> defaults to an empty object. Always send an <code>idempotencyKey</code> you derive from the business event: without one every call is a new proposal and nothing is deduplicated. Supplying an input the platform derives returns 422 <code>actions/derived-input-supplied</code>.</p>
+<h2 id="list-actions-awaiting-approval">List actions awaiting approval<a class="d-anchor" href="#list-actions-awaiting-approval" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/actions/pending</code></p>
+<p>Lists proposals waiting for approval, limited to actions the caller may approve.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/actions/pending&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;invocationId&quot;: &quot;inv_01JBX3VSJ2D3QV2Z0B17EQ78VS&quot;,
+    &quot;action&quot;: &quot;quotes.send-quote&quot;,
+    &quot;risk&quot;: &quot;moderate&quot;,
+    &quot;input&quot;: {
+      &quot;quoteNumber&quot;: &quot;Q-1042&quot;
+    },
+    &quot;provenance&quot;: {},
+    &quot;description&quot;: &quot;Email a quote to the customer&quot;,
+    &quot;compensation&quot;: null,
+    &quot;derivedInputs&quot;: [],
+    &quot;proposedBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+    &quot;proposedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+  }
+]</code></pre>
+<p>Response shape not yet documented for <code>provenance</code>; the empty object in the example is a placeholder.</p>
+<h2 id="approve-an-action">Approve an action<a class="d-anchor" href="#approve-an-action" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/actions/{invocationId}/approve</code></p>
+<p>Approves a waiting proposal and queues it. The approver must be someone other than the proposer.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>invocationId</code></td><td>path</td><td>yes</td><td>The invocation id from the propose call.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/actions/&lt;invocationId&gt;/approve&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;reason&quot;:&quot;Checked the total with the customer&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;reason&quot;: &quot;Checked the total with the customer&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;status&quot;: &quot;queued&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>actions/not-found</code></td><td><code>no such invocation</code></td></tr><tr><td>422</td><td><code>actions/not-pending</code></td><td><code>invocation is &#39;&lt;status&gt;&#39;, not awaiting approval</code></td></tr><tr><td>422</td><td><code>actions/denied</code></td><td><code>no approve access to &#39;&lt;action&gt;&#39;</code></td></tr><tr><td>422</td><td><code>actions/self-approval</code></td><td><code>the approver must be different from the proposer</code></td></tr></tbody></table></div>
+<p><code>reason</code> is optional. A portal session may also call this route.</p>
+<h2 id="deny-an-action">Deny an action<a class="d-anchor" href="#deny-an-action" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/actions/{invocationId}/deny</code></p>
+<p>Denies a waiting proposal.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>invocationId</code></td><td>path</td><td>yes</td><td>The invocation id from the propose call.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/actions/&lt;invocationId&gt;/deny&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;reason&quot;:&quot;Wrong customer&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;reason&quot;: &quot;Wrong customer&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;status&quot;: &quot;denied&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>actions/not-found</code></td><td><code>no such invocation</code></td></tr><tr><td>422</td><td><code>actions/not-pending</code></td><td><code>invocation is &#39;&lt;status&gt;&#39;, not awaiting approval</code></td></tr><tr><td>422</td><td><code>actions/denied</code></td><td><code>no approve access to &#39;&lt;action&gt;&#39;</code></td></tr><tr><td>422</td><td><code>actions/self-approval</code></td><td><code>the approver must be different from the proposer</code></td></tr></tbody></table></div>
+<p><code>reason</code> is optional. A portal session may also call this route.</p>
+<h2 id="get-an-action-invocation">Get an action invocation<a class="d-anchor" href="#get-an-action-invocation" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/actions/{invocationId}</code></p>
+<p>Returns the status and result of one invocation. Only the proposer or someone who may approve the action can see it.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>invocationId</code></td><td>path</td><td>yes</td><td>The invocation id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/actions/&lt;invocationId&gt;&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;invocationId&quot;: &quot;inv_01JBX3VSJ2D3QV2Z0B17EQ78VS&quot;,
+  &quot;action&quot;: &quot;quotes.send-quote&quot;,
+  &quot;status&quot;: &quot;succeeded&quot;,
+  &quot;input&quot;: {
+    &quot;quoteNumber&quot;: &quot;Q-1042&quot;
+  },
+  &quot;provenance&quot;: {},
+  &quot;result&quot;: {
+    &quot;sent&quot;: true
+  },
+  &quot;errorDetail&quot;: null,
+  &quot;proposedBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+  &quot;approvedBy&quot;: &quot;usr_00000000000000000000000009&quot;,
+  &quot;denyReason&quot;: null,
+  &quot;attempts&quot;: 1,
+  &quot;proposedAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+  &quot;completedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>actions/not-found</code></td><td><code>no such invocation</code></td></tr></tbody></table></div>
+<p><code>status</code> is <code>proposed</code>, <code>queued</code>, <code>leased</code>, <code>running</code>, <code>succeeded</code>, <code>failed</code>, <code>denied</code> or <code>dead</code>. Anyone else gets 404. Response shape not yet documented for <code>provenance</code> and <code>result</code>, whose contents depend on the action; the examples are placeholders.</p>
+<h2 id="grant-action-access">Grant action access<a class="d-anchor" href="#grant-action-access" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/actions/grants</code></p>
+<p>Lets one user, one group or one app propose, or approve, an action. Name exactly one principal.</p>
+<p><strong>Auth:</strong> administrator API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/actions/grants&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;action&quot;:&quot;quotes.send-quote&quot;,&quot;groupId&quot;:&quot;grp_01JBX3AEWFGRGNRHA3GTM6Y8FZ&quot;,&quot;allowPropose&quot;:true,&quot;allowApprove&quot;:false,&quot;purpose&quot;:&quot;Sales team sends quotes&quot;,&quot;expiresDays&quot;:90}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;action&quot;: &quot;quotes.send-quote&quot;,
+  &quot;groupId&quot;: &quot;grp_01JBX3AEWFGRGNRHA3GTM6Y8FZ&quot;,
+  &quot;allowPropose&quot;: true,
+  &quot;allowApprove&quot;: false,
+  &quot;purpose&quot;: &quot;Sales team sends quotes&quot;,
+  &quot;expiresDays&quot;: 90
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;grantId&quot;: &quot;ag_01JBX3FS6TKPBWAAZHT7N83MS7&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>grants/forbidden-workload</code></td><td><code>an application&#39;s own token cannot grant access; an organisation administrator&#39;s admin token can</code></td></tr><tr><td>403</td><td><code>grants/forbidden-scope</code></td><td><code>granting requires the &#39;admin&#39; scope</code></td></tr><tr><td>422</td><td><code>actions/one-principal</code></td><td><code>exactly one of userId/groupId/applicationId is required</code></td></tr><tr><td>422</td><td><code>actions/unknown-action</code></td><td><code>no action &#39;&lt;action&gt;&#39; in this organisation</code></td></tr></tbody></table></div>
+<p><code>allowPropose</code> defaults to true and <code>allowApprove</code> to false. <code>purpose</code> and <code>expiresDays</code> are optional. A portal session cannot call this route.</p>
+<h2 id="propose-a-plan">Propose a plan<a class="d-anchor" href="#propose-a-plan" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/plans</code></p>
+<p>Proposes up to 20 actions as one plan that a person approves once. A step can use an earlier step&#39;s output with <code>{&quot;$fromStep&quot;: 1, &quot;output&quot;: &quot;fieldName&quot;}</code>.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/plans&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;name&quot;:&quot;Onboard Sample Co&quot;,&quot;description&quot;:&quot;Create the customer and send the first quote&quot;,&quot;steps&quot;:[{&quot;action&quot;:&quot;quotes.create-quote&quot;,&quot;input&quot;:{&quot;customer&quot;:&quot;Sample Co&quot;}},{&quot;action&quot;:&quot;quotes.send-quote&quot;,&quot;input&quot;:{&quot;quoteNumber&quot;:{&quot;$fromStep&quot;:1,&quot;output&quot;:&quot;quoteNumber&quot;}},&quot;waitUntil&quot;:&quot;2026-10-23T00:00:00.000Z&quot;,&quot;waitReason&quot;:&quot;Send after the customer&#39;\&#39;&#39;s office opens&quot;}]}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;name&quot;: &quot;Onboard Sample Co&quot;,
+  &quot;description&quot;: &quot;Create the customer and send the first quote&quot;,
+  &quot;steps&quot;: [
+    {
+      &quot;action&quot;: &quot;quotes.create-quote&quot;,
+      &quot;input&quot;: {
+        &quot;customer&quot;: &quot;Sample Co&quot;
+      }
+    },
+    {
+      &quot;action&quot;: &quot;quotes.send-quote&quot;,
+      &quot;input&quot;: {
+        &quot;quoteNumber&quot;: {
+          &quot;$fromStep&quot;: 1,
+          &quot;output&quot;: &quot;quoteNumber&quot;
+        }
+      },
+      &quot;waitUntil&quot;: &quot;2026-10-23T00:00:00.000Z&quot;,
+      &quot;waitReason&quot;: &quot;Send after the customer&#39;s office opens&quot;
+    }
+  ]
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;planId&quot;: &quot;plan_01JBX3M08R69XJE166YVJK034H&quot;,
+  &quot;status&quot;: &quot;proposed&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>422</td><td><code>plans/no-name</code></td><td><code>a plan needs a name</code></td></tr><tr><td>422</td><td><code>plans/empty</code></td><td><code>a plan needs at least one step</code></td></tr><tr><td>422</td><td><code>plans/too-long</code></td><td><code>a plan holds at most 20 steps</code></td></tr><tr><td>422</td><td><code>plans/step-denied</code></td><td><code>step &lt;n&gt;: no propose access to &#39;&lt;action&gt;&#39;</code></td></tr><tr><td>422</td><td><code>plans/bad-reference</code></td><td><code>step &lt;n&gt; field &#39;&lt;key&gt;&#39; refers to step &lt;k&gt;, which is not an earlier step — a reference can only name a step that has already run</code></td></tr><tr><td>422</td><td><code>plans/bad-wait</code></td><td><code>step &lt;n&gt;: waitUntil is not a valid timestamp</code></td></tr><tr><td>422</td><td><code>plans/bad-template-ref</code></td><td><code>templateRef is at most 200 characters</code></td></tr></tbody></table></div>
+<p><code>description</code>, <code>templateRef</code>, <code>waitUntil</code> and <code>waitReason</code> are optional. The plan&#39;s steps run in order once approved.</p>
+<h2 id="list-plans">List plans<a class="d-anchor" href="#list-plans" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/plans</code></p>
+<p>Lists plans the caller proposed or may decide.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/plans&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;plans&quot;: [
+    {
+      &quot;id&quot;: &quot;plan_01JBX3M08R69XJE166YVJK034H&quot;,
+      &quot;name&quot;: &quot;Onboard Sample Co&quot;,
+      &quot;description&quot;: &quot;Create the customer and send the first quote&quot;,
+      &quot;status&quot;: &quot;proposed&quot;,
+      &quot;templateRef&quot;: null,
+      &quot;proposedBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+      &quot;approvedBy&quot;: null,
+      &quot;denyReason&quot;: null,
+      &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+      &quot;completedAt&quot;: null,
+      &quot;steps&quot;: [
+        {
+          &quot;id&quot;: &quot;pstep_01JBX34AGQ80JJ4HDT8QY4V3PY&quot;,
+          &quot;position&quot;: 1,
+          &quot;action&quot;: &quot;quotes.send-quote&quot;,
+          &quot;input&quot;: {
+            &quot;quoteNumber&quot;: &quot;Q-1043&quot;
+          },
+          &quot;status&quot;: &quot;pending&quot;,
+          &quot;invocationId&quot;: null,
+          &quot;result&quot;: null,
+          &quot;errorDetail&quot;: null,
+          &quot;description&quot;: &quot;Email a quote to the customer&quot;,
+          &quot;risk&quot;: &quot;moderate&quot;,
+          &quot;compensation&quot;: null,
+          &quot;waitUntil&quot;: null,
+          &quot;waitReason&quot;: null
+        }
+      ]
+    }
+  ]
+}</code></pre>
+<h2 id="get-a-plan">Get a plan<a class="d-anchor" href="#get-a-plan" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/plans/{id}</code></p>
+<p>Returns one plan with each step&#39;s status and result.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>id</code></td><td>path</td><td>yes</td><td>The plan id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/plans/&lt;id&gt;&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;plan_01JBX3M08R69XJE166YVJK034H&quot;,
+  &quot;name&quot;: &quot;Onboard Sample Co&quot;,
+  &quot;description&quot;: &quot;Create the customer and send the first quote&quot;,
+  &quot;status&quot;: &quot;proposed&quot;,
+  &quot;templateRef&quot;: null,
+  &quot;proposedBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+  &quot;approvedBy&quot;: null,
+  &quot;denyReason&quot;: null,
+  &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+  &quot;completedAt&quot;: null,
+  &quot;steps&quot;: [
+    {
+      &quot;id&quot;: &quot;pstep_01JBX34AGQ80JJ4HDT8QY4V3PY&quot;,
+      &quot;position&quot;: 1,
+      &quot;action&quot;: &quot;quotes.send-quote&quot;,
+      &quot;input&quot;: {
+        &quot;quoteNumber&quot;: &quot;Q-1043&quot;
+      },
+      &quot;status&quot;: &quot;pending&quot;,
+      &quot;invocationId&quot;: null,
+      &quot;result&quot;: null,
+      &quot;errorDetail&quot;: null,
+      &quot;description&quot;: &quot;Email a quote to the customer&quot;,
+      &quot;risk&quot;: &quot;moderate&quot;,
+      &quot;compensation&quot;: null,
+      &quot;waitUntil&quot;: null,
+      &quot;waitReason&quot;: null
+    }
+  ]
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>plans/not-found</code></td><td><code>no such plan</code></td></tr></tbody></table></div>
+<p>Plan <code>status</code> is <code>proposed</code>, <code>approved</code>, <code>running</code>, <code>completed</code>, <code>denied</code> or <code>failed</code>.</p>
+<h2 id="approve-or-deny-a-plan">Approve or deny a plan<a class="d-anchor" href="#approve-or-deny-a-plan" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/plans/{id}/decision</code></p>
+<p>Approves or denies a proposed plan. Approving needs approve access to every action in it, and the approver must be someone other than the proposer.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>id</code></td><td>path</td><td>yes</td><td>The plan id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/plans/&lt;id&gt;/decision&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;decision&quot;:&quot;approve&quot;,&quot;reason&quot;:&quot;Reviewed the quote values&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;decision&quot;: &quot;approve&quot;,
+  &quot;reason&quot;: &quot;Reviewed the quote values&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;status&quot;: &quot;approved&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>400</td><td><code>plans/bad-decision</code></td><td><code>decision must be approve or deny</code></td></tr><tr><td>404</td><td><code>plans/not-found</code></td><td><code>no such plan</code></td></tr><tr><td>422</td><td><code>plans/not-pending</code></td><td><code>plan is &#39;&lt;status&gt;&#39;, not awaiting approval</code></td></tr><tr><td>422</td><td><code>plans/self-approval</code></td><td><code>the approver must be different from the proposer</code></td></tr><tr><td>422</td><td><code>plans/step-not-approvable</code></td><td><code>you may not approve &#39;&lt;action&gt;&#39; (step &lt;n&gt;), so you cannot approve a plan containing it</code></td></tr></tbody></table></div>
+<p><code>status</code> in the response is <code>approved</code> or <code>denied</code>. <code>reason</code> is optional. This route needs an API token: a portal session cannot call it.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/actions.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#list-actions">List actions</a></li><li class="l2"><a href="#propose-an-action">Propose an action</a></li><li class="l2"><a href="#list-actions-awaiting-approval">List actions awaiting approval</a></li><li class="l2"><a href="#approve-an-action">Approve an action</a></li><li class="l2"><a href="#deny-an-action">Deny an action</a></li><li class="l2"><a href="#get-an-action-invocation">Get an action invocation</a></li><li class="l2"><a href="#grant-action-access">Grant action access</a></li><li class="l2"><a href="#propose-a-plan">Propose a plan</a></li><li class="l2"><a href="#list-plans">List plans</a></li><li class="l2"><a href="#get-a-plan">Get a plan</a></li><li class="l2"><a href="#approve-or-deny-a-plan">Approve or deny a plan</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

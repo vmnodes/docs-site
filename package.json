@@ -1,0 +1,12 @@
+{
+  "name": "vmnodes-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "docs.vmnodes.com: the public VMnodes docs, built from docs/public",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test 'test/*.test.mjs'",
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=22" }
+}

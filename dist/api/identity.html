@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Identity and the app directory · VMnodes docs</title>
+<meta name="description" content="Apps that sign people in verify a gateway-issued identity token against the public keys below, and can invite customers or look up people through the directory calls. Directory calls need the matching scope on the app&#39;s token, which the manifest permissions.directory block requests.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/identity.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="identity-and-the-app-directory">Identity and the app directory</h1>
+<p>Apps that sign people in verify a gateway-issued identity token against the public keys below, and can invite customers or look up people through the directory calls. Directory calls need the matching scope on the app&#39;s token, which the manifest <code>permissions.directory</code> block requests.</p>
+<h2 id="get-the-identity-public-keys">Get the identity public keys<a class="d-anchor" href="#get-the-identity-public-keys" aria-label="Link to this section">#</a></h2>
+<p><code>GET /auth/jwks</code></p>
+<p>Returns the public keys that verify the identity tokens the gateway issues. Cache the keys and refetch when a token names a <code>kid</code> you do not hold. This route is at the root of the API address, not under <code>/v1</code>.</p>
+<p><strong>Auth:</strong> none.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/auth/jwks&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;keys&quot;: [
+    {
+      &quot;kty&quot;: &quot;RSA&quot;,
+      &quot;n&quot;: &quot;0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw&quot;,
+      &quot;e&quot;: &quot;AQAB&quot;,
+      &quot;kid&quot;: &quot;key_01JBX3WP08XKV737QED1DQE8GP&quot;,
+      &quot;alg&quot;: &quot;RS256&quot;,
+      &quot;use&quot;: &quot;sig&quot;
+    }
+  ]
+}</code></pre>
+<p>Identity tokens are RS256 JWTs. Each key has <code>use</code> of <code>sig</code>.</p>
+<h2 id="invite-a-customer">Invite a customer<a class="d-anchor" href="#invite-a-customer" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/directory/customers</code></p>
+<p>Creates a customer identity entitled to one app and emails them an invite. The same email can be invited again to a different app. A customer is a separate kind of user from staff.</p>
+<p><strong>Auth:</strong> API token with the directory.invite-customers scope.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/directory/customers&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;email&quot;:&quot;pat@example.com&quot;,&quot;displayName&quot;:&quot;Pat Example&quot;,&quot;applicationId&quot;:&quot;app_00000000000000000000000001&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;email&quot;: &quot;pat@example.com&quot;,
+  &quot;displayName&quot;: &quot;Pat Example&quot;,
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;userId&quot;: &quot;usr_00000000000000000000000002&quot;,
+  &quot;entitled&quot;: true
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>token lacks the directory.invite-customers scope</code></td></tr><tr><td>400</td><td><code>directory/no-application</code></td><td><code>applicationId is required</code></td></tr><tr><td>400</td><td><code>directory/foreign-application</code></td><td><code>a workload token invites customers to its own application only</code></td></tr><tr><td>400</td><td><code>directory/unknown-application</code></td><td><code>application does not exist in this organisation</code></td></tr><tr><td>400</td><td><code>directory/bad-email</code></td><td><code>invalid email address</code></td></tr><tr><td>400</td><td><code>directory/kind-conflict</code></td><td><code>a &lt;kind&gt; user already exists with this email</code></td></tr></tbody></table></div>
+<p><code>displayName</code> is optional. An app&#39;s own token is pinned to its own app, so <code>applicationId</code> can be left out when the app calls; an administrator API token must send it. <code>kind</code> in the last error is the existing user&#39;s kind, for example <code>staff</code>.</p>
+<h2 id="look-up-people">Look up people<a class="d-anchor" href="#look-up-people" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/directory/lookup</code></p>
+<p>Searches the organisation&#39;s people for the calling app, matching a name or email fragment. Only people entitled to the app are returned. Only an app&#39;s own token can call it.</p>
+<p><strong>Auth:</strong> API token with the directory.lookup scope.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/directory/lookup?q=pat&amp;limit=20&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;userId&quot;: &quot;usr_00000000000000000000000002&quot;,
+    &quot;displayName&quot;: &quot;Pat Example&quot;,
+    &quot;email&quot;: &quot;pat@example.com&quot;,
+    &quot;kind&quot;: &quot;staff&quot;
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>token lacks the directory.lookup scope — declare permissions.directory.lookupPeople in the manifest</code></td></tr><tr><td>400</td><td><code>directory/no-application</code></td><td><code>a directory lookup is scoped to one application</code></td></tr><tr><td>400</td><td><code>directory/foreign-application</code></td><td><code>unknown application in this organisation</code></td></tr></tbody></table></div>
+<p><code>limit</code> defaults to 20 and is held between 1 and 50.</p>
+<h2 id="list-groups-for-an-app">List groups for an app<a class="d-anchor" href="#list-groups-for-an-app" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/directory/groups</code></p>
+<p>Lists the groups attached to the calling app, for an app that shows or filters by group membership.</p>
+<p><strong>Auth:</strong> API token with the directory.group-members scope.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/directory/groups&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;groups&quot;: [
+    {
+      &quot;groupId&quot;: &quot;grp_01JBX3AEWFGRGNRHA3GTM6Y8FZ&quot;,
+      &quot;name&quot;: &quot;sales-team&quot;
+    }
+  ],
+  &quot;truncated&quot;: false
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>token lacks the directory.group-members scope — declare permissions.directory.listGroupMembers in the manifest</code></td></tr></tbody></table></div>
+<p>Needs an app&#39;s own token.</p>
+<h2 id="list-members-of-a-group">List members of a group<a class="d-anchor" href="#list-members-of-a-group" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/directory/groups/{groupId}/members</code></p>
+<p>Lists up to 1000 members of a group attached to the calling app. <code>truncated</code> is true when more exist.</p>
+<p><strong>Auth:</strong> API token with the directory.group-members scope.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>groupId</code></td><td>path</td><td>yes</td><td>The group id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/directory/groups/&lt;groupId&gt;/members&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;members&quot;: [
+    {
+      &quot;userId&quot;: &quot;usr_00000000000000000000000002&quot;,
+      &quot;displayName&quot;: &quot;Pat Example&quot;,
+      &quot;kind&quot;: &quot;staff&quot;
+    }
+  ],
+  &quot;truncated&quot;: false
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>token lacks the directory.group-members scope — declare permissions.directory.listGroupMembers in the manifest</code></td></tr><tr><td>404</td><td><code>directory/group-not-found</code></td><td><code>group does not exist</code></td></tr></tbody></table></div>
+<p>A group that is missing, in another organisation, or not attached to the app all answer 404.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/identity.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#get-the-identity-public-keys">Get the identity public keys</a></li><li class="l2"><a href="#invite-a-customer">Invite a customer</a></li><li class="l2"><a href="#look-up-people">Look up people</a></li><li class="l2"><a href="#list-groups-for-an-app">List groups for an app</a></li><li class="l2"><a href="#list-members-of-a-group">List members of a group</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

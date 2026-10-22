@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API reference · VMnodes docs</title>
+<meta name="description" content="The VMnodes HTTP API: what your app calls to share and read data, and what an administrator&#39;s tools call to manage apps. Every endpoint below has an example you can run.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/index.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/" aria-current="page">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="api-reference">API reference</h1>
+<p>The VMnodes HTTP API: what your app calls to share and read data, and what an administrator&#39;s tools call to manage apps. Every endpoint below has an example you can run.</p>
+<h2 id="who-can-call-it">Who can call it<a class="d-anchor" href="#who-can-call-it" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>Your app</strong>, with its own app token. When your app shares data, VMnodes gives it <code>VMNODES_API_URL</code> and <code>VMNODES_PUBLISH_TOKEN</code> (see <a href="/reference/environment">Environment variables</a>). Endpoints marked <em>app token</em> are called this way.</li><li><strong>Tools and scripts</strong>, with an API token. API tokens are issued by your VMnodes contact today; there is no screen for them yet. The examples read it from <code>$VMNODES_API_TOKEN</code>.</li></ul>
+<p>Every example uses <code>$VMNODES_API_URL</code> as the base address. Inside your app it is set for you; for an API token, your VMnodes contact tells you the address.</p>
+<h2 id="errors">Errors<a class="d-anchor" href="#errors" aria-label="Link to this section">#</a></h2>
+<p>A refused request answers with a 4xx or 5xx status and a body of the form <code>{&quot;error&quot;: {&quot;code&quot;: &quot;&lt;area&gt;/&lt;reason&gt;&quot;, &quot;message&quot;: &quot;&lt;sentence&gt;&quot;}}</code>. The <code>code</code> is stable; the <code>message</code> is for people. <code>401</code> means the token is missing or not valid; <code>429</code> means slow down and retry.</p>
+<h2 id="sections">Sections<a class="d-anchor" href="#sections" aria-label="Link to this section">#</a></h2>
+<div class="d-table"><table><thead><tr><th scope="col">Section</th><th scope="col">Endpoints</th></tr></thead><tbody><tr><td><a href="/api/sharing">Sharing data from your app</a></td><td>2</td></tr><tr><td><a href="/api/reading">Reading shared data</a></td><td>7</td></tr><tr><td><a href="/api/identity">Identity and the app directory</a></td><td>5</td></tr><tr><td><a href="/api/applications">Applications and deployments</a></td><td>17</td></tr><tr><td><a href="/api/people">People and roles</a></td><td>3</td></tr><tr><td><a href="/api/groups">Groups</a></td><td>3</td></tr><tr><td><a href="/api/governance">Data governance</a></td><td>1</td></tr><tr><td><a href="/api/actions">Actions and approvals</a></td><td>11</td></tr><tr><td><a href="/api/connectors">Connectors</a></td><td>2</td></tr><tr><td><a href="/api/mail">Mail</a></td><td>1</td></tr><tr><td><a href="/api/ai">AI completions</a></td><td>1</td></tr><tr><td><a href="/api/organisation">Organisation</a></td><td>4</td></tr></tbody></table></div>
+<p>This reference documents 57 endpoints. The API has others that are for the platform&#39;s own use and are not part of the public reference.</p>
+  <p class="d-meta"><a href="/api/index.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#who-can-call-it">Who can call it</a></li><li class="l2"><a href="#errors">Errors</a></li><li class="l2"><a href="#sections">Sections</a></li></ul></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sharing data from your app · VMnodes docs</title>
+<meta name="description" content="These two calls publish your app&#39;s records so other apps and people can read them through the governed data path. Call them with your app&#39;s own token, which the platform injects as VMNODES_PUBLISH_TOKEN (API address in VMNODES_API_URL). Every request sends Authorization: Bearer &lt;token&gt; and a JSON body. Errors come back as {&quot;error&quot;:{&quot;code&quot;:&quot;...&quot;,&quot;message&quot;:&quot;...&quot;}}. The API allows 300 requests per minute per caller.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/sharing.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="sharing-data-from-your-app">Sharing data from your app</h1>
+<p>These two calls publish your app&#39;s records so other apps and people can read them through the governed data path. Call them with your app&#39;s own token, which the platform injects as <code>VMNODES_PUBLISH_TOKEN</code> (API address in <code>VMNODES_API_URL</code>). Every request sends <code>Authorization: Bearer &lt;token&gt;</code> and a JSON body. Errors come back as <code>{&quot;error&quot;:{&quot;code&quot;:&quot;...&quot;,&quot;message&quot;:&quot;...&quot;}}</code>. The API allows 300 requests per minute per caller.</p>
+<h2 id="register-an-entity">Register an entity<a class="d-anchor" href="#register-an-entity" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/publish/entities</code></p>
+<p>Declares a shared entity and its queryable fields. Call it once per entity version at boot, after the app has a live production deployment, and before publishing records. The entity name must be <code>&lt;appName&gt;.&lt;local&gt;</code>, and <code>vmnodes.json</code> must declare <code>&lt;local&gt;/vN</code> under <code>publishes</code>. Registering the same version again replaces the field list. Every field of an app&#39;s entity starts not shared: <code>notSharedFields</code> lists them, and an administrator decides which become readable.</p>
+<p><strong>Auth:</strong> app token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/publish/entities&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_PUBLISH_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;entity&quot;:&quot;quotes.quote&quot;,&quot;version&quot;:1,&quot;description&quot;:&quot;A quote sent to a customer&quot;,&quot;classification&quot;:&quot;internal&quot;,&quot;queryableFields&quot;:[{&quot;name&quot;:&quot;quoteNumber&quot;,&quot;type&quot;:&quot;string&quot;},{&quot;name&quot;:&quot;customer&quot;,&quot;type&quot;:&quot;string&quot;},{&quot;name&quot;:&quot;total&quot;,&quot;type&quot;:&quot;number&quot;},{&quot;name&quot;:&quot;sentAt&quot;,&quot;type&quot;:&quot;timestamp&quot;}],&quot;grain&quot;:[&quot;quoteNumber&quot;]}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;quotes.quote&quot;,
+  &quot;version&quot;: 1,
+  &quot;description&quot;: &quot;A quote sent to a customer&quot;,
+  &quot;classification&quot;: &quot;internal&quot;,
+  &quot;queryableFields&quot;: [
+    {
+      &quot;name&quot;: &quot;quoteNumber&quot;,
+      &quot;type&quot;: &quot;string&quot;
+    },
+    {
+      &quot;name&quot;: &quot;customer&quot;,
+      &quot;type&quot;: &quot;string&quot;
+    },
+    {
+      &quot;name&quot;: &quot;total&quot;,
+      &quot;type&quot;: &quot;number&quot;
+    },
+    {
+      &quot;name&quot;: &quot;sentAt&quot;,
+      &quot;type&quot;: &quot;timestamp&quot;
+    }
+  ],
+  &quot;grain&quot;: [
+    &quot;quoteNumber&quot;
+  ]
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;entityDefinitionId&quot;: &quot;de_01JBX36G6FWVCMAESX3YS8FNKE&quot;,
+  &quot;notSharedFields&quot;: [
+    &quot;quoteNumber&quot;,
+    &quot;customer&quot;,
+    &quot;total&quot;,
+    &quot;sentAt&quot;
+  ]
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>publish/workload-token-required</code></td><td><code>publishing needs a workload token bound to an application</code></td></tr><tr><td>422</td><td><code>publish/unknown-application</code></td><td><code>no such application</code></td></tr><tr><td>422</td><td><code>publish/namespace-denied</code></td><td><code>applications publish only in their own namespace — &#39;&lt;entity&gt;&#39; must start with &#39;&lt;appName&gt;.&#39;</code></td></tr><tr><td>422</td><td><code>publish/entity-owned-elsewhere</code></td><td><code>&#39;&lt;entity&gt;&#39; belongs to a different source</code></td></tr><tr><td>422</td><td><code>publish/not-declared</code></td><td><code>&#39;&lt;entity&gt;&#39; at version &lt;n&gt; cannot be registered: no live deployment. vmnodes.json&#39;s &quot;publishes&quot; must list &quot;&lt;local&gt;/v&lt;n&gt;&quot; once this application has one.</code></td></tr><tr><td>422</td><td><code>publish/not-declared</code></td><td><code>&#39;&lt;entity&gt;&#39; at version &lt;n&gt; is not declared on the live deployment — vmnodes.json&#39;s &quot;publishes&quot; must list &quot;&lt;local&gt;/v&lt;n&gt;&quot;.</code></td></tr><tr><td>422</td><td><code>publish/not-declared</code></td><td><code>&#39;&lt;entity&gt;&#39; at version &lt;n&gt; cannot be registered: the live deployment&#39;s image recorded no publishes list (built before vmnodes.json publishes was read), so there is nothing to check against. Rebuild to declare one, listing &quot;&lt;local&gt;/v&lt;n&gt;&quot; in vmnodes.json&#39;s &quot;publishes&quot;.</code></td></tr><tr><td>422</td><td><code>data/bad-entity-name</code></td><td><code>entity names are namespace.name, lowercase, with NO version suffix — &#39;&lt;entity&gt;&#39; is not one. A manifest declares &#39;name/vN&#39;; this field takes the bare name and &#39;version&#39; separately.</code></td></tr><tr><td>422</td><td><code>data/description-required</code></td><td><code>description is required — it is what a human reads when deciding whether to grant access to this dataset</code></td></tr><tr><td>422</td><td><code>data/no-queryable-fields</code></td><td><code>queryableFields must list at least one field — an entity nobody can query is not publishable</code></td></tr><tr><td>422</td><td><code>data/bad-queryable-field</code></td><td><code>every queryable field needs a name</code></td></tr><tr><td>422</td><td><code>data/bad-field-type</code></td><td><code>field &#39;&lt;name&gt;&#39; has type &#39;&lt;type&gt;&#39; — must be string, number, boolean or timestamp</code></td></tr><tr><td>422</td><td><code>data/bad-grain</code></td><td><code>grain names &lt;f, f&gt;, which are not queryable fields on this entity</code></td></tr></tbody></table></div>
+<p><code>version</code> defaults to 1. <code>classification</code> defaults to <code>internal</code>. Field <code>type</code> is one of <code>string</code>, <code>number</code>, <code>boolean</code>, <code>timestamp</code>. <code>grain</code> names the fields that identify one record and must be queryable fields. Send the bare entity name and the version separately: <code>quotes.quote</code> with <code>version</code> 1, never <code>quotes.quote/v1</code>. The three <code>publish/not-declared</code> errors mean the same thing from different starting points: the live production deployment does not list <code>quote/v1</code> under <code>publishes</code> in <code>vmnodes.json</code>. The first is the common trap: an app that registers at boot, before its first deployment is live, has no live deployment yet, so register after startup and retry. Replace <code>&lt;local&gt;</code> with the part of the entity after <code>&lt;appName&gt;.</code>.</p>
+<h2 id="publish-records">Publish records<a class="d-anchor" href="#publish-records" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/publish/records</code></p>
+<p>Sends up to 1000 records for a registered entity. Each record has a stable <code>recordKey</code> and a <code>payload</code> object. Fields that are not shared are removed from the stored payload. With <code>mode</code> <code>snapshot</code> the call is treated as the complete set: records you do not send are tombstoned. With <code>upsert</code> (the default) only the records you send change.</p>
+<p><strong>Auth:</strong> app token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/publish/records&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_PUBLISH_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;entity&quot;:&quot;quotes.quote&quot;,&quot;mode&quot;:&quot;upsert&quot;,&quot;records&quot;:[{&quot;recordKey&quot;:&quot;Q-1042&quot;,&quot;payload&quot;:{&quot;quoteNumber&quot;:&quot;Q-1042&quot;,&quot;customer&quot;:&quot;Example Pty Ltd&quot;,&quot;total&quot;:1850,&quot;sentAt&quot;:&quot;2026-10-20T01:00:00.000Z&quot;},&quot;sourceUpdatedAt&quot;:&quot;2026-10-20T01:00:00.000Z&quot;},{&quot;recordKey&quot;:&quot;Q-1043&quot;,&quot;payload&quot;:{&quot;quoteNumber&quot;:&quot;Q-1043&quot;,&quot;customer&quot;:&quot;Sample Co&quot;,&quot;total&quot;:420.5,&quot;sentAt&quot;:&quot;2026-10-21T04:30:00.000Z&quot;}}]}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;quotes.quote&quot;,
+  &quot;mode&quot;: &quot;upsert&quot;,
+  &quot;records&quot;: [
+    {
+      &quot;recordKey&quot;: &quot;Q-1042&quot;,
+      &quot;payload&quot;: {
+        &quot;quoteNumber&quot;: &quot;Q-1042&quot;,
+        &quot;customer&quot;: &quot;Example Pty Ltd&quot;,
+        &quot;total&quot;: 1850,
+        &quot;sentAt&quot;: &quot;2026-10-20T01:00:00.000Z&quot;
+      },
+      &quot;sourceUpdatedAt&quot;: &quot;2026-10-20T01:00:00.000Z&quot;
+    },
+    {
+      &quot;recordKey&quot;: &quot;Q-1043&quot;,
+      &quot;payload&quot;: {
+        &quot;quoteNumber&quot;: &quot;Q-1043&quot;,
+        &quot;customer&quot;: &quot;Sample Co&quot;,
+        &quot;total&quot;: 420.5,
+        &quot;sentAt&quot;: &quot;2026-10-21T04:30:00.000Z&quot;
+      }
+    }
+  ]
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;upserted&quot;: 2,
+  &quot;tombstoned&quot;: 0
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>publish/workload-token-required</code></td><td><code>publishing needs a workload token bound to an application</code></td></tr><tr><td>422</td><td><code>publish/too-many-records</code></td><td><code>publish at most 1000 records per call</code></td></tr><tr><td>422</td><td><code>publish/unknown-entity</code></td><td><code>register &#39;&lt;entity&gt;&#39; before publishing to it</code></td></tr><tr><td>422</td><td><code>publish/retired</code></td><td><code>This app no longer shares &#39;&lt;entity&gt;&#39;. Nothing new is accepted for it.</code></td></tr><tr><td>422</td><td><code>publish/entity-owned-elsewhere</code></td><td><code>&#39;&lt;entity&gt;&#39; belongs to a different source</code></td></tr></tbody></table></div>
+<p><code>sourceUpdatedAt</code> is optional and, when sent, is used for freshness in query provenance. <code>mode</code> defaults to <code>upsert</code>. Records that fail field checks return 422 with a message naming the field.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/sharing.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#register-an-entity">Register an entity</a></li><li class="l2"><a href="#publish-records">Publish records</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

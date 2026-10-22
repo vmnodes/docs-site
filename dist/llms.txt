@@ -1,0 +1,50 @@
+# VMnodes
+
+> VMnodes runs web apps for a business, and these docs tell you how to build one that runs on it. Start here to find the page that matches your task.
+
+These docs describe only what works today. Each link is the page as Markdown. All of them in one file: https://docs.vmnodes.com/llms-full.txt
+
+## Start
+
+- [VMnodes documentation](https://docs.vmnodes.com/index.md): VMnodes runs web apps for a business, and these docs tell you how to build one that runs on it. Start here to find the page that matches your task.
+- [Getting started](https://docs.vmnodes.com/getting-started.md): Take the VMnodes starter from nothing to a running app that you have tried, changed and updated. Read this first: every other page assumes you have done it once.
+
+## How-to
+
+- [Build a form-and-list app](https://docs.vmnodes.com/how-to/form-and-list.md): Build an app where signed-in staff fill in a form and see every entry in a list, and only people you choose can use it. Read this when a customer asks for a sign-in book, a log, or any "add a row, see the rows" tool. The example is a visitor book for the org acme: reception signs visitors in and out, and the entries are kept in the app's database.
+- [Submit and approve](https://docs.vmnodes.com/how-to/approvals.md): Build an app where one person raises a request and a different person approves or rejects it, with the rule enforced by the server and not by what the page shows. Read this for purchase, expense, leave or any other sign-off. The example is purchase requests at the org acme, approved by the budget holder.
+- [Keep data through updates](https://docs.vmnodes.com/how-to/keep-data-through-updates.md): Make an app keep its data when you update it, and change its tables later without losing a row. Read this before the first update of any app that stores anything, and again before the first change to its tables. The example is a stationery stock list for the org acme, which gains a "reorder level" column in its second version.
+- [Share data](https://docs.vmnodes.com/how-to/share-data.md): Share some of your app's records with the other apps in your org, and keep the rest private. Read this when another team or app needs to see what yours holds. The example is a meeting-room booking app at the org acme: it shares which room is taken and when, and keeps the organiser's name and phone number to itself.
+- [Read shared data](https://docs.vmnodes.com/how-to/read-shared-data.md): Read the records another app in your org shares, for example to show the meeting-room bookings of one app inside another. Read this before you promise a customer that one app will show another's data, because today a portal app cannot start reading without your VMnodes contact.
+- [Change an app someone else built](https://docs.vmnodes.com/how-to/change-an-app.md): Make a change to an app that is already online and was built by someone else, and put it live without breaking it or losing its data. Read this when you are handed a repository and asked to change it. The example is a team link list at the org acme that gets a "category" on every link.
+
+## Concepts
+
+- [Orgs and people](https://docs.vmnodes.com/concepts/orgs-and-people.md): Understand who can do what in an org: who is an administrator, who is a member, and how a person gets into an app. Read this before you plan who will use the app you are building.
+- [Apps](https://docs.vmnodes.com/concepts/apps.md): Understand what an app is on VMnodes, how it goes online, what runs it, and how it is updated. Read this before you write the app's server or its Dockerfile.
+- [Sign-in and identity](https://docs.vmnodes.com/concepts/sign-in-and-identity.md): Understand how a person reaches your app and how your app learns who they are. Read this before you write any code that handles a request: it is the one thing every app must do correctly.
+- [Roles](https://docs.vmnodes.com/concepts/roles.md): Understand how an app declares roles, how an administrator gives them to people, and how the app checks them. Read this before you let anyone do something that only some people should do.
+- [Data](https://docs.vmnodes.com/concepts/data.md): Understand where an app's data lives, which of it survives an update, and how to ask VMnodes for a database. Read this before your app stores anything it cannot afford to lose.
+- [Sharing](https://docs.vmnodes.com/concepts/sharing.md): Understand how an app shares records with other apps in its org, and who decides which fields leave. Read this before you publish anything, and before you plan an app that needs another app's data.
+- [Connectors](https://docs.vmnodes.com/concepts/connectors.md): Understand what a connector is and which ones an administrator can set up in the portal today. Read this when your app needs to read a private repository, or needs mail, AI or a directory of people.
+
+## Reference
+
+- [vmnodes.json reference](https://docs.vmnodes.com/reference/vmnodes-json.md): vmnodes.json is the file at your repository's root that tells VMnodes which roles your app checks, whether it needs a database, and which records it shares. Read this page when you write or change that file, or when a launch or update refuses it.
+- [Environment variables](https://docs.vmnodes.com/reference/environment.md): The platform sets a small, fixed group of environment variables in your app's container. Read this page to know which ones exist, when each is present, and which ones are not set for you.
+- [Build, run and security checks](https://docs.vmnodes.com/reference/build-and-run.md): This page lists how VMnodes builds your repository, what your app must do to be started and kept online, what the security scan blocks, and what an update does. Read it when a launch or update fails, or before you choose how to package an app.
+- [Identity SDK](https://docs.vmnodes.com/reference/identity-sdk.md): @vmnodes/identity checks the signed identity token the gateway adds to every request and gives your app a user object with roles. Read this page to install it, call it, handle its errors, or check the token yourself in a language that has no SDK.
+- [Publish and query API](https://docs.vmnodes.com/reference/publish-api.md): Your app shares records with other apps in the org by registering an entity and then publishing records to it, with two calls. Read this page when you add sharing to an app, when a publish call is refused, or when you need to read shared records back.
+- [manifest.json reference](https://docs.vmnodes.com/reference/manifest-json.md): manifest.json is the advanced way to put an app on VMnodes. It is run by your VMnodes contact: they sign the manifest, submit it and approve the install. Read this page only when an app has to declare actions that other apps can trigger, consume other apps' shared data as an installed extension, or ask for a mail, directory or AI permission. An app that only needs sign-in, roles, a database and sharing goes online from the portal with vmnodes.json instead.
+- [Limits and what is not possible yet](https://docs.vmnodes.com/reference/limits.md): This page lists every fixed limit on a VMnodes app, and everything a builder cannot do on their own today, with what to do instead. Read it before you promise a customer a feature, and when something you expected is missing.
+- [Troubleshooting](https://docs.vmnodes.com/troubleshooting.md): Search this page for the exact text you saw. Each entry gives the message, what it means, and what to do, and ends on how you know it is fixed. Messages are grouped by where they appear, and quoted exactly as VMnodes shows them; <name> stands for a value VMnodes fills in.
+
+## API and MCP
+
+- [API reference](https://docs.vmnodes.com/api/index.md): The VMnodes HTTP API: what your app calls to share and read data, and what an administrator's tools call to manage apps. Every endpoint below has an example you can run.
+- [MCP server](https://docs.vmnodes.com/mcp.md): The VMnodes MCP server lets an AI assistant inspect, deploy and operate your organisation's apps through the same API the portal uses. This page lists every tool it offers, with an example call.
+
+## Downloads
+
+- [Starter app](https://docs.vmnodes.com/downloads/vmnodes-starter.tar.gz): a small, tested app to copy: sign-in, a role, a database and sharing.
+- [Identity package](https://docs.vmnodes.com/downloads/vmnodes-identity-0.1.0.tgz): @vmnodes/identity, which verifies who is signed in.

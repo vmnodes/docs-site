@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mail · VMnodes docs</title>
+<meta name="description" content="Send a plain-text email to a person in the organisation or to an address, from the platform&#39;s sending address. Needs the mail.send scope, which the manifest permissions.mail.send field requests.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/mail.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="mail">Mail</h1>
+<p>Send a plain-text email to a person in the organisation or to an address, from the platform&#39;s sending address. Needs the <code>mail.send</code> scope, which the manifest <code>permissions.mail.send</code> field requests.</p>
+<h2 id="send-an-email">Send an email<a class="d-anchor" href="#send-an-email" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/connectors/mail/send</code></p>
+<p>Sends a plain-text email to a person in the organisation or to an address. The idempotency key makes a retried call send once.</p>
+<p><strong>Auth:</strong> API token with the mail.send scope.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/connectors/mail/send&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;to&quot;:{&quot;email&quot;:&quot;pat@example.com&quot;},&quot;subject&quot;:&quot;Quote Q-1042&quot;,&quot;textBody&quot;:&quot;Hello Pat,\n\nYour quote Q-1042 is ready.&quot;,&quot;ref&quot;:&quot;Q-1042&quot;,&quot;idempotencyKey&quot;:&quot;quote-Q-1042-sent&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;to&quot;: {
+    &quot;email&quot;: &quot;pat@example.com&quot;
+  },
+  &quot;subject&quot;: &quot;Quote Q-1042&quot;,
+  &quot;textBody&quot;: &quot;Hello Pat,\n\nYour quote Q-1042 is ready.&quot;,
+  &quot;ref&quot;: &quot;Q-1042&quot;,
+  &quot;idempotencyKey&quot;: &quot;quote-Q-1042-sent&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;messageId&quot;: &quot;mail_01JBX3GGZF4R91KTZVQGQ41EZX&quot;,
+  &quot;status&quot;: &quot;sent&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>mail/forbidden</code></td><td><code>token lacks the mail.send scope</code></td></tr><tr><td>400</td><td><code>mail/bad-subject</code></td><td><code>subject is required (max 200 chars)</code></td></tr><tr><td>400</td><td><code>mail/bad-body</code></td><td><code>textBody is required (max 100000 chars)</code></td></tr><tr><td>400</td><td><code>mail/bad-idempotency-key</code></td><td><code>idempotencyKey is required (max 200 chars)</code></td></tr><tr><td>400</td><td><code>mail/bad-ref</code></td><td><code>ref must be a string (max 100 chars)</code></td></tr><tr><td>400</td><td><code>mail/bad-recipient</code></td><td><code>provide exactly one of to.userId or to.email</code></td></tr><tr><td>400</td><td><code>mail/unknown-recipient</code></td><td><code>no such user in this organisation</code></td></tr><tr><td>429</td><td><code>mail/rate-limited</code></td><td><code>hourly send limit reached</code></td></tr><tr><td>502</td><td><code>mail/send-failed</code></td><td><code>mail transport failed; retry with the same idempotencyKey</code></td></tr></tbody></table></div>
+<p><code>to</code> holds exactly one of <code>userId</code> or <code>email</code>. <code>ref</code> is optional. An invalid address returns 400 <code>mail/bad-recipient</code> with <code>invalid email address</code>. When mail is not set up the 503 body is a bare <code>{&quot;error&quot;:&quot;mail transport is not configured&quot;}</code> with no code. Limits: 50 sends per hour per caller and 200 per hour per organisation; a 429 carries a <code>retry-after</code> header of 300 seconds.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/mail.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#send-an-email">Send an email</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

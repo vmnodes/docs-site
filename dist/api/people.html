@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People and roles · VMnodes docs</title>
+<meta name="description" content="List the organisation&#39;s directory, flag organisation administrators, set managers, and read an app&#39;s roles. Customer identities are separate from staff identities and can never be organisation administrators.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/people.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="people-and-roles">People and roles</h1>
+<p>List the organisation&#39;s directory, flag organisation administrators, set managers, and read an app&#39;s roles. Customer identities are separate from staff identities and can never be organisation administrators.</p>
+<h2 id="list-users">List users<a class="d-anchor" href="#list-users" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/directory/users</code></p>
+<p>Lists every person in the organisation, staff and customers.</p>
+<p><strong>Auth:</strong> administrator (portal session or API token).</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/directory/users&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;userId&quot;: &quot;usr_00000000000000000000000002&quot;,
+    &quot;email&quot;: &quot;pat@example.com&quot;,
+    &quot;displayName&quot;: &quot;Pat Example&quot;,
+    &quot;kind&quot;: &quot;staff&quot;,
+    &quot;isOrgAdmin&quot;: true,
+    &quot;managerUserId&quot;: null,
+    &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>listing the directory needs an admin token, or an organisation administrator</code></td></tr></tbody></table></div>
+<h2 id="set-organisation-administrator">Set organisation administrator<a class="d-anchor" href="#set-organisation-administrator" aria-label="Link to this section">#</a></h2>
+<p><code>PUT /v1/directory/users/{userId}/org-admin</code></p>
+<p>Promotes or demotes a user as an organisation administrator. Administrators approve extension access to data, promote others and receive incident alerts.</p>
+<p><strong>Auth:</strong> administrator (portal session or API token).</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>userId</code></td><td>path</td><td>yes</td><td>The user id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X PUT &quot;$VMNODES_API_URL/v1/directory/users/&lt;userId&gt;/org-admin&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;isOrgAdmin&quot;:true}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;isOrgAdmin&quot;: true
+}</code></pre>
+<p><strong>Response</strong> <code>204</code></p>
+<pre data-lang="json"><code>null</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>flagging an organisation admin needs an organisation administrator, or an admin token</code></td></tr><tr><td>400</td><td><code>directory/unknown-user</code></td><td><code>user does not exist in this organisation</code></td></tr><tr><td>400</td><td><code>directory/customer-not-admin</code></td><td><code>customer identities cannot be organisation admins</code></td></tr><tr><td>409</td><td><code>directory/last-administrator</code></td><td><code>this is the only administrator of the organisation, and removing the last one cannot be undone from the console: nobody would be able to approve an extension&#39;s access to your data, promote a replacement, or receive incident alerts. Promote another administrator first, then remove this one. Nothing was changed.</code></td></tr></tbody></table></div>
+<p>Only <code>&quot;isOrgAdmin&quot;: true</code> promotes. A body that leaves the field out or sends anything else demotes the user. Always send the field.</p>
+<h2 id="set-a-users-manager">Set a user&#39;s manager<a class="d-anchor" href="#set-a-users-manager" aria-label="Link to this section">#</a></h2>
+<p><code>PUT /v1/directory/users/{userId}/manager</code></p>
+<p>Sets or clears who a user reports to.</p>
+<p><strong>Auth:</strong> administrator API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>userId</code></td><td>path</td><td>yes</td><td>The user id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X PUT &quot;$VMNODES_API_URL/v1/directory/users/&lt;userId&gt;/manager&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;managerUserId&quot;:&quot;usr_00000000000000000000000009&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;managerUserId&quot;: &quot;usr_00000000000000000000000009&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>204</code></p>
+<pre data-lang="json"><code>null</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>directory/forbidden</code></td><td><code>setting a manager requires an admin token</code></td></tr><tr><td>400</td><td><code>directory/self-manager</code></td><td><code>a user cannot be their own manager</code></td></tr><tr><td>400</td><td><code>directory/unknown-user</code></td><td><code>user does not exist in this organisation</code></td></tr></tbody></table></div>
+<p>Send <code>managerUserId</code> as <code>null</code>, or leave it out, to clear the manager.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/people.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#list-users">List users</a></li><li class="l2"><a href="#set-organisation-administrator">Set organisation administrator</a></li><li class="l2"><a href="#set-a-users-manager">Set a user&#39;s manager</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

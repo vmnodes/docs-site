@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Read shared data · VMnodes docs</title>
+<meta name="description" content="Read the records another app in your org shares, for example to show the meeting-room bookings of one app inside another. Read this before you promise a customer that one app will show another&#39;s data, because today a portal app cannot start reading without your VMnodes contact.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/read-shared-data.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data" aria-current="page">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="read-shared-data">Read shared data</h1>
+<p>Read the records another app in your org shares, for example to show the meeting-room bookings of one app inside another. Read this before you promise a customer that one app will show another&#39;s data, because today a portal app cannot start reading without your VMnodes contact.</p>
+<blockquote><p><strong>Coming:</strong> reading another app&#39;s shared data from a portal app. Today it needs your VMnodes contact.</p></blockquote>
+<h2 id="what-works-today-and-what-does-not">What works today, and what does not<a class="d-anchor" href="#what-works-today-and-what-does-not" aria-label="Link to this section">#</a></h2>
+<p>Reading is a request to <code>POST /v1/data/query</code> with a bearer token that belongs to the reading app. Two things must exist first, and you can create neither yourself:</p>
+<div class="d-table"><table><thead><tr><th scope="col">Needed</th><th scope="col">Who does it</th><th scope="col">Why you cannot</th></tr></thead><tbody><tr><td><strong>Access</strong> for your app to the shared record type, by name, such as <code>meeting-rooms.booking</code></td><td>Your VMnodes contact</td><td><code>vmnodes.json</code> has no key to ask for it, and the <strong>Shares</strong> tab does not grant it</td></tr><tr><td><strong>A token</strong> for your app, and the API address to send it to</td><td>Your VMnodes contact</td><td>An app gets a token only when it lists something under <code>publishes</code>, and an app that only reads publishes nothing</td></tr></tbody></table></div>
+<blockquote><p><strong>Trap:</strong> do not add a <code>publishes</code> entry to your reading app just to be given a token. The app would then declare a record type it never publishes, only to borrow a credential. Ask your contact for the token.</p></blockquote>
+<p>The sharing app also has its part to do. Its administrator must switch the fields on in its <strong>Shares</strong> tab, as <a href="/how-to/share-data">Share data</a> step 10 describes. Until then a read is refused.</p>
+<p>What you can do today:</p>
+<ol><li>Build the app so it works with no shared data yet and says so, instead of failing.</li><li>Send your contact one message that asks for everything at once (step 2).</li><li>Add the query code and test it against a pretend platform, before the real access exists (step 3).</li></ol>
+<h2 id="1-find-out-exactly-what-you-need">1. Find out exactly what you need<a class="d-anchor" href="#1-find-out-exactly-what-you-need" aria-label="Link to this section">#</a></h2>
+<p>Ask whoever runs the sharing app, or open its <strong>Shares</strong> tab if you are its administrator, for the record type&#39;s full name and its fields.</p>
+<p>It worked when you have three things written down: the entity name in the form <code>&lt;app&gt;.&lt;thing&gt;</code> with no version (the example is <code>meeting-rooms.booking</code>), the field names you will read (<code>room</code>, <code>startsAt</code>, <code>endsAt</code>), and a <strong>Shared</strong> mark beside each of those fields on the sharing app&#39;s <strong>Shares</strong> tab. A field marked <strong>Not shared</strong> is refused.</p>
+<h2 id="2-ask-your-vmnodes-contact">2. Ask your VMnodes contact<a class="d-anchor" href="#2-ask-your-vmnodes-contact" aria-label="Link to this section">#</a></h2>
+<p>Send this, filled in:</p>
+<blockquote><p>Please give my app <strong>link-list</strong> read access to the shared record type <strong>meeting-rooms.booking</strong>, for the fields <strong>room</strong>, <strong>startsAt</strong> and <strong>endsAt</strong>. My app only reads, so it has no publish token: please give it a token for reading, and tell me the API address and how the token will reach the app. The app is in the org <strong>acme</strong>.</p></blockquote>
+<p>It worked when your contact confirms the access, gives you the API address and a token for your app, and tells you how the app receives them.</p>
+<h2 id="3-add-the-query-code">3. Add the query code<a class="d-anchor" href="#3-add-the-query-code" aria-label="Link to this section">#</a></h2>
+<p>Save this as <code>query-shared.js</code>. It sends the request, returns the rows, and throws the platform&#39;s own message when it refuses, so the refusal reaches your log intact. <code>apiUrl</code> and <code>token</code> are the two values your contact gives you. They are not <code>VMNODES_API_URL</code> and <code>VMNODES_PUBLISH_TOKEN</code>, which an app that publishes nothing is not given.</p>
+<pre data-lang="js"><code>// query-shared.js: reads another app&#39;s shared records with POST /v1/data/query.
+//
+// apiUrl and token are the two values your VMnodes contact gives you together with the
+// access. They are NOT VMNODES_API_URL / VMNODES_PUBLISH_TOKEN: an app that publishes
+// nothing is not given those.
+
+// Returns { rows, truncated, provenance }. Throws an Error with .status and .code when the
+// platform refuses, with the platform&#39;s own message, so the refusal reaches the log intact.
+async function queryShared({ apiUrl, token, entity, select, filter, orderBy, limit }) {
+  if (!apiUrl || !token) throw new Error(&quot;queryShared needs apiUrl and token: ask your VMnodes contact for both&quot;);
+  const res = await fetch(`${apiUrl}/v1/data/query`, {
+    method: &quot;POST&quot;,
+    headers: { &quot;content-type&quot;: &quot;application/json&quot;, authorization: `Bearer ${token}` },
+    body: JSON.stringify({ entity, select, filter, orderBy, limit }),
+  });
+  const text = await res.text();
+  let body;
+  try { body = JSON.parse(text); } catch { body = null; }
+  if (!res.ok) {
+    const e = new Error(body?.error?.message || `query answered ${res.status}`);
+    e.status = res.status;
+    e.code = body?.error?.code;
+    throw e;
+  }
+  return { rows: body.rows, truncated: body.truncated === true, provenance: body.provenance };
+}
+
+module.exports = { queryShared };</code></pre>
+<p>Save this as <code>test/query-shared.js</code>. It runs <code>queryShared</code> against a pretend platform, so you can check the code before the real access exists. Each refusal it checks is one the platform documents.</p>
+<pre data-lang="js"><code>// test/query-shared.js: `node test/query-shared.js`. Runs queryShared against a pretend platform
+// and checks what it SENDS and how it reacts to the refusals the platform documents.
+const http = require(&quot;node:http&quot;);
+const { queryShared } = require(&quot;../query-shared&quot;);
+
+let pass = 0, fail = 0;
+function check(name, got, want) {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? &quot;ok  &quot; : &quot;FAIL&quot;} ${name}${ok ? &quot;&quot; : `  (expected ${JSON.stringify(want)}, got ${JSON.stringify(got)})`}`);
+}
+
+const TOKEN = &quot;test-token&quot;;
+const seen = [];
+const server = http.createServer((req, res) =&gt; {
+  let raw = &quot;&quot;; req.on(&quot;data&quot;, (d) =&gt; (raw += d));
+  req.on(&quot;end&quot;, () =&gt; {
+    const reply = (status, body) =&gt; { res.writeHead(status, { &quot;content-type&quot;: &quot;application/json&quot; }); res.end(JSON.stringify(body)); };
+    if (req.headers.authorization !== `Bearer ${TOKEN}`) return reply(401, { error: { code: &quot;auth/unauthorised&quot;, message: &quot;a valid API token is required&quot; } });
+    const q = JSON.parse(raw);
+    seen.push({ method: req.method, url: req.url, q });
+    if (q.entity !== &quot;meeting-rooms.booking&quot;) return reply(403, { error: { code: &quot;data/denied&quot;, message: `no query access to &#39;${q.entity}&#39;` } });
+    if (q.select.includes(&quot;organiserPhone&quot;)) return reply(403, { error: { code: &quot;data/field-denied&quot;, message: &quot;field &#39;organiserPhone&#39; is not available to you on &#39;meeting-rooms.booking&#39;&quot; } });
+    reply(200, {
+      rows: [{ room: &quot;Boardroom&quot;, startsAt: &quot;2026-10-22T14:00:00.000Z&quot; }],
+      provenance: { entity: q.entity, source: &quot;meeting-rooms&quot;, freshestAt: &quot;2026-10-22T09:00:00.000Z&quot;, stalestAt: &quot;2026-10-22T09:00:00.000Z&quot; },
+      truncated: false, rowCount: 1,
+    });
+  });
+});
+
+async function refusal(args) {
+  try { await queryShared(args); return null; } catch (e) { return { status: e.status, code: e.code, message: e.message }; }
+}
+
+server.listen(0, &quot;127.0.0.1&quot;, () =&gt; run().catch((e) =&gt; { console.error(&quot;FAIL the test itself crashed:&quot;, e.message); process.exit(1); }));
+
+async function run() {
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  const ok = { apiUrl, token: TOKEN, entity: &quot;meeting-rooms.booking&quot;, select: [&quot;room&quot;, &quot;startsAt&quot;], orderBy: { field: &quot;startsAt&quot;, dir: &quot;asc&quot; }, limit: 20 };
+
+  const got = await queryShared(ok);
+  check(&quot;CONTROL: a granted query returns the rows&quot;, got.rows, [{ room: &quot;Boardroom&quot;, startsAt: &quot;2026-10-22T14:00:00.000Z&quot; }]);
+  check(&quot;it names the app the rows came from&quot;, got.provenance.source, &quot;meeting-rooms&quot;);
+  check(&quot;it says whether the answer was cut short&quot;, got.truncated, false);
+  check(&quot;it sends POST /v1/data/query with the entity, fields, order and limit&quot;, [seen[0].method, seen[0].url, seen[0].q], [&quot;POST&quot;, &quot;/v1/data/query&quot;, { entity: &quot;meeting-rooms.booking&quot;, select: [&quot;room&quot;, &quot;startsAt&quot;], orderBy: { field: &quot;startsAt&quot;, dir: &quot;asc&quot; }, limit: 20 }]);
+
+  check(&quot;a wrong token -&gt; 401 with the platform&#39;s message&quot;, await refusal({ ...ok, token: &quot;nope&quot; }), { status: 401, code: &quot;auth/unauthorised&quot;, message: &quot;a valid API token is required&quot; });
+  check(&quot;an entity with no grant -&gt; its message, unchanged&quot;, await refusal({ ...ok, entity: &quot;crm.note&quot; }), { status: 403, code: &quot;data/denied&quot;, message: &quot;no query access to &#39;crm.note&#39;&quot; });
+  check(&quot;a field that is not shared with the reader -&gt; its message&quot;, (await refusal({ ...ok, select: [&quot;room&quot;, &quot;organiserPhone&quot;] })).code, &quot;data/field-denied&quot;);
+  const before = seen.length;
+  const noToken = await refusal({ ...ok, token: undefined });
+  check(&quot;no token configured: refuses with a message that says what to ask for&quot;, noToken.message.startsWith(&quot;queryShared needs apiUrl and token&quot;), true);
+  check(&quot;...and sends nothing&quot;, seen.length - before, 0);
+
+  const FLOOR = 9;
+  if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
+  console.log(`\npassed=${pass} failed=${fail}`);
+  server.close();
+  process.exit(fail === 0 ? 0 : 1);
+}</code></pre>
+<pre data-lang="bash"><code>node test/query-shared.js</code></pre>
+<p>It worked when the last line is <code>passed=9 failed=0</code>. A run with no <code>passed=</code> line is broken plumbing: read the first <code>FAIL</code> line.</p>
+<h2 id="4-call-it-from-your-app">4. Call it from your app<a class="d-anchor" href="#4-call-it-from-your-app" aria-label="Link to this section">#</a></h2>
+<pre data-lang="js"><code>const { queryShared } = require(&quot;./query-shared&quot;);
+
+// Use the names your VMnodes contact tells you for these two values.
+const apiUrl = process.env.SHARED_DATA_URL;
+const token = process.env.SHARED_DATA_TOKEN;
+
+async function upcomingBookings() {
+  // Until the access exists, say so on the page instead of failing the page.
+  if (!apiUrl || !token) return { connected: false, rows: [] };
+  const { rows, truncated, provenance } = await queryShared({
+    apiUrl,
+    token,
+    entity: &quot;meeting-rooms.booking&quot;,
+    select: [&quot;room&quot;, &quot;startsAt&quot;, &quot;endsAt&quot;],
+    orderBy: { field: &quot;startsAt&quot;, dir: &quot;asc&quot; },
+    limit: 20,
+  });
+  return { connected: true, rows, truncated, asOf: provenance.freshestAt };
+}</code></pre>
+<p>Keep the role check on your own routes: reading shared data does not replace <code>identity.requireRole</code>. The same call from the command line, with the address and token your contact gave you:</p>
+<pre data-lang="bash"><code>curl -sS -w &#39;\n%{http_code}\n&#39; -X POST &quot;$API_URL/v1/data/query&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{&quot;entity&quot;:&quot;meeting-rooms.booking&quot;,&quot;select&quot;:[&quot;room&quot;,&quot;startsAt&quot;,&quot;endsAt&quot;],&quot;orderBy&quot;:{&quot;field&quot;:&quot;startsAt&quot;,&quot;dir&quot;:&quot;asc&quot;},&quot;limit&quot;:20}&#39;</code></pre>
+<p>It worked when the status line is <code>200</code> and the body has <code>rows</code> (a list of objects with only the fields you selected), <code>rowCount</code>, <code>truncated: false</code> and a <code>provenance</code> object whose <code>source</code> is <code>meeting-rooms</code>. The full request and response are in <a href="/reference/publish-api#reading-shared-records">The publish API</a>.</p>
+<h2 id="5-read-a-refusal">5. Read a refusal<a class="d-anchor" href="#5-read-a-refusal" aria-label="Link to this section">#</a></h2>
+<p>The platform&#39;s message says what to do. These are the ones you will meet first.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Message</th><th scope="col">What it means</th><th scope="col">What to do</th></tr></thead><tbody><tr><td><code>a valid API token is required</code> (401)</td><td>The token is missing, wrong or not for an app.</td><td>Check the token your contact gave you. An app that publishes nothing has none until they do.</td></tr><tr><td><code>no query access to &#39;&lt;entity&gt;&#39;</code></td><td>One answer for three cases: the entity does not exist, your app has no access, or no field of it is shared.</td><td>Check the spelling of the entity, then ask the sharing app&#39;s administrator whether the fields read <strong>Shared</strong>, then ask your contact whether the access exists.</td></tr><tr><td><code>field &#39;&lt;field&gt;&#39; is not available to you on &#39;&lt;entity&gt;&#39;</code></td><td>A field you selected, filtered or ordered by is not shared with your app.</td><td>Select only fields shared with you, or ask for more.</td></tr><tr><td><code>select at least one field</code></td><td><code>select</code> is empty.</td><td>Name the fields you want.</td></tr></tbody></table></div>
+<p><a href="/reference/publish-api">The publish API</a> lists the rest.</p>
+<h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
+<ol><li><code>node test/query-shared.js</code> ends <code>passed=9 failed=0</code>.</li><li>Before the access exists, your app starts and its page says shared data is not connected, with no error. Start it without <code>SHARED_DATA_URL</code> and <code>SHARED_DATA_TOKEN</code> set and open the page.</li><li>After your contact has set it up, the <code>curl</code> call above prints <code>200</code> and a <code>rows</code> list.</li><li>The control: change the entity in that call to one that does not exist, for example <code>meeting-rooms.nothing</code>. It prints <code>no query access to &#39;meeting-rooms.nothing&#39;</code>. A read check that cannot be made to fail proves nothing.</li><li>Sign in as a person who lacks your app&#39;s role and open the page that shows the shared rows: it answers 403, not the rows.</li></ol>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>Do not start building on shared data before the access exists.</strong> Anything that needs the read will fail with <code>a valid API token is required</code> or <code>no query access to &#39;&lt;entity&gt;&#39;</code>. Send the step 2 message first.</li><li><strong>The entity name is <code>&lt;app&gt;.&lt;thing&gt;</code>, never <code>&lt;thing&gt;/vN</code>.</strong> The version is for <code>vmnodes.json</code>. A wrong name and a missing grant give the same message, so a typo looks like a refusal.</li><li><strong>A field the sharing app has not switched on is refused.</strong> Reading needs the sharing app&#39;s administrator to press <strong>Turn on</strong> for each field, and your contact to grant the access. Both.</li><li><strong>Rows need their identifying fields.</strong> If your <code>select</code> or your access leaves out a field that identifies a row, the read is refused with a message that begins <code>rows of &#39;&lt;entity&gt;&#39; are identified by</code>. Aggregate with <code>count</code>, <code>sum</code>, <code>min</code> or <code>max</code> instead, or ask for the field.</li><li><strong>It is a copy, and it can be old.</strong> Show <code>provenance.freshestAt</code> where the age matters. Do not present it as live.</li><li><strong>Read the cut-off.</strong> <code>limit</code> is 50 by default and at most 200. A <code>truncated</code> of <code>true</code> means more rows matched than you were sent. Filter, order and page in the query, not in your code.</li><li><strong>Your app&#39;s token sees what your app may see, not what the signed-in person may see.</strong> To limit a result to what both may read, send the person&#39;s identity header value as <code>X-Vmnodes-On-Behalf-Of</code>. Only an app&#39;s token may send it.</li><li><strong>Do not poll.</strong> Publish and query requests share a limit of 300 a minute and 1 MiB a request. Read when someone opens the page, and keep the answer for a short time.</li><li><strong>Treat the token like a password.</strong> Never commit it and never log it. <code>queryShared</code> never puts the token in the message it throws.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/sharing">Sharing</a></li><li><a href="/reference/publish-api">The publish API</a></li><li><a href="/how-to/share-data">Share data</a></li><li><a href="/reference/limits">Limits</a></li></ul>
+  <p class="d-meta"><a href="/how-to/read-shared-data.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#what-works-today-and-what-does-not">What works today, and what does not</a></li><li class="l2"><a href="#1-find-out-exactly-what-you-need">1. Find out exactly what you need</a></li><li class="l2"><a href="#2-ask-your-vmnodes-contact">2. Ask your VMnodes contact</a></li><li class="l2"><a href="#3-add-the-query-code">3. Add the query code</a></li><li class="l2"><a href="#4-call-it-from-your-app">4. Call it from your app</a></li><li class="l2"><a href="#5-read-a-refusal">5. Read a refusal</a></li><li class="l2"><a href="#check-it-works">Check it works</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

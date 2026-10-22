@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · VMnodes docs</title>
+<meta name="description" content="Take the VMnodes starter from nothing to a running app that you have tried, changed and updated. Read this first: every other page assumes you have done it once.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/getting-started.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started" aria-current="page">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="getting-started">Getting started</h1>
+<p>Take the VMnodes starter from nothing to a running app that you have tried, changed and updated. Read this first: every other page assumes you have done it once.</p>
+<p>The starter is a team noticeboard. Anyone signed in can read notes, and people with the <code>starter.editor</code> role can post them. It already verifies sign-in, checks a role, keeps its notes in a database, shares them and answers <code>/health</code>.</p>
+<h2 id="before-you-start">Before you start<a class="d-anchor" href="#before-you-start" aria-label="Link to this section">#</a></h2>
+<p>You need three things:</p>
+<ol><li><strong>An org and an administrator account.</strong> Sign-up is by invite today: ask your VMnodes contact for an invite code and the sign-up address. When sign-up finishes you are signed in at <code>https://apps.acme.vmnodes.com</code> (with your own org name in place of <code>acme</code>) as the org&#39;s administrator.</li><li><strong>Compute.</strong> On the org&#39;s first screen, <strong>Get your space ready</strong>, press <strong>Get compute</strong>. The page counts through &quot;Creating your host.&quot;, &quot;Installing the software your apps run on.&quot; and &quot;Setting up your web address.&quot;. It worked when the <strong>Your apps</strong> page offers <strong>Put an app online</strong>. Only an administrator sees this button.</li><li><strong>A git repository the platform can read</strong>, and a computer with Node 22 or later, <code>npm</code> and <code>git</code>. The repository is either public at an <code>https://</code> address, or a private GitHub repository you give VMnodes access to in step 4.</li></ol>
+<h2 id="1-download-the-starter">1. Download the starter<a class="d-anchor" href="#1-download-the-starter" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>curl -fsSLO https://docs.vmnodes.com/downloads/vmnodes-starter.tar.gz
+tar -xzf vmnodes-starter.tar.gz
+mv vmnodes-starter acme-notes
+cd acme-notes
+ls package.json vmnodes.json Dockerfile</code></pre>
+<p>It worked when <code>ls</code> prints all three names. The repository root must hold <code>package.json</code>, <code>vmnodes.json</code> and <code>Dockerfile</code>, because VMnodes reads them from the root.</p>
+<h2 id="2-run-it-on-your-computer">2. Run it on your computer<a class="d-anchor" href="#2-run-it-on-your-computer" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npm install
+npm test
+npm run dev</code></pre>
+<p><code>npm test</code> runs the app against a pretend sign-in gateway and ends with a line <code>passed=N failed=0</code>. If it does not, fix that before anything else.</p>
+<p><code>npm run dev</code> starts the app on port 3000 and a pretend portal on port 4100, and prints <code>Open http://127.0.0.1:4100 in your browser.</code> It keeps running until you press Ctrl+C. Open <code>http://127.0.0.1:4100</code>.</p>
+<p>It worked when the page is headed <strong>Noticeboard</strong>, reads &quot;Signed in as Eden Editor (editor@example.test)&quot; and shows a <strong>New note</strong> box with a <strong>Post note</strong> button. The pretend portal signs you in as an editor.</p>
+<p>Switch who you are by visiting these two addresses:</p>
+<pre><code>http://127.0.0.1:4100/_as/reader
+http://127.0.0.1:4100/_as/editor</code></pre>
+<p>After <code>/_as/reader</code>, reload <code>http://127.0.0.1:4100</code>: the <strong>New note</strong> box is gone and the page reads &quot;You can read notes. Posting needs the <code>starter.editor</code> role.&quot; After <code>/_as/editor</code> the box is back. Locally the page ends &quot;Notes are kept in memory, so they are cleared when the app restarts or is updated.&quot; because <code>npm run dev</code> sets no database.</p>
+<p>Stop the dev command with Ctrl+C.</p>
+<h2 id="3-push-it-to-a-git-repository">3. Push it to a git repository<a class="d-anchor" href="#3-push-it-to-a-git-repository" aria-label="Link to this section">#</a></h2>
+<p>Create an empty repository on GitHub, then:</p>
+<pre data-lang="bash"><code>git init -b main
+git add .
+git commit -m &quot;Start from the VMnodes starter&quot;
+git remote add origin https://github.com/acme/acme-notes.git
+git push -u origin main</code></pre>
+<p>It worked when the repository&#39;s page on GitHub lists <code>server.js</code>, <code>vmnodes.json</code>, <code>Dockerfile</code> and <code>vendor</code>. VMnodes always builds the latest commit on the repository&#39;s default branch; you cannot choose another branch or a tag.</p>
+<h2 id="4-put-the-app-online">4. Put the app online<a class="d-anchor" href="#4-put-the-app-online" aria-label="Link to this section">#</a></h2>
+<ol><li>Sign in to your org&#39;s portal at <code>https://apps.acme.vmnodes.com</code>. The sign-in sends a six-digit code to your email. You land on <strong>Your apps</strong>.</li><li>Press <strong>Put an app online</strong>. The page of that name opens, with the section <strong>1. Where is the code?</strong><ul><li><strong>Public repository:</strong> paste its <code>https://</code> address into <strong>Or paste a public repository&#39;s URL</strong>. The address must have no username, password or token in it.</li><li><strong>Private GitHub repository:</strong> press <strong>Connect GitHub</strong>, install VMnodes Builds on that repository on GitHub&#39;s own screen, and you are brought back. Choose the repository from the <strong>Repository</strong> list. If it is not listed, open <strong>Can&#39;t see your repo? Paste its URL</strong>.</li></ul></li><li>Under <strong>2. Name it</strong>, type <code>acme-notes</code> into <strong>App name</strong>. Use 3 to 30 lowercase letters, digits and hyphens, starting with a letter.</li><li>Press <strong>Put it online</strong>.</li></ol>
+<p>It worked when you land on a page headed <code>acme-notes</code> with a <strong>Starting</strong> badge. The <strong>Build log</strong> section lists the steps as they run: &quot;Waiting to start…&quot;, &quot;Creating your application…&quot;, &quot;Building your image…&quot;, &quot;Checking your image for security issues…&quot; and &quot;Deploying your app…&quot;. The page refreshes itself. A launch takes a few minutes.</p>
+<h2 id="5-watch-the-launch">5. Watch the launch<a class="d-anchor" href="#5-watch-the-launch" aria-label="Link to this section">#</a></h2>
+<p>Leave the page open. The launch ends one of two ways.</p>
+<ul><li><strong>It worked:</strong> the badge reads <strong>Working</strong>. An <strong>Open acme-notes</strong> button and a <strong>View app page</strong> button appear. A line reads &quot;You have every role acme-notes declares: starter.editor.&quot; The <strong>Build log</strong> ends &quot;Your app is live.&quot;</li><li><strong>It failed:</strong> the badge reads <strong>Not working</strong>, a sentence says why, and a <strong>Try again</strong> button starts a new launch of the same name and repository. Look the sentence up in <a href="/troubleshooting">Troubleshooting</a>.</li></ul>
+<p>If the page says &quot;Your app is live, but your access to it couldn&#39;t be set up. Press Try again.&quot;, press <strong>Try again</strong> once: only the access step is retried.</p>
+<h2 id="6-open-the-app">6. Open the app<a class="d-anchor" href="#6-open-the-app" aria-label="Link to this section">#</a></h2>
+<p>Press <strong>Open acme-notes</strong>. Your browser is already signed in, so the app opens at <code>https://acme-notes.acme.vmnodes.com</code>.</p>
+<p>It worked when the page is headed <strong>Noticeboard</strong>, reads &quot;No notes yet.&quot;, shows a <strong>New note</strong> box, and ends &quot;Notes are kept in this app&#39;s database, across restarts and updates.&quot; Type a note and press <strong>Post note</strong>: the page returns with your note in the list.</p>
+<p>Two more addresses on the app show what the app sees. <code>/health</code> answers without sign-in, for example <code>{&quot;status&quot;:&quot;ok&quot;,&quot;app&quot;:&quot;acme-notes&quot;,&quot;version&quot;:&quot;0.1.0&quot;,&quot;buildCommit&quot;:&quot;&lt;40 characters&gt;&quot;,&quot;publishing&quot;:true,&quot;storage&quot;:&quot;postgres&quot;}</code>. <code>/api/me</code> lists who you are and your roles.</p>
+<h2 id="7-take-the-role-off-yourself-then-put-it-back">7. Take the role off yourself, then put it back<a class="d-anchor" href="#7-take-the-role-off-yourself-then-put-it-back" aria-label="Link to this section">#</a></h2>
+<p>Seeing what a reader sees needs no second person.</p>
+<ol><li>On the launch page press <strong>View app page</strong>, then open the <strong>People</strong> tab.</li><li>Find the row marked &quot;(you)&quot;. Its <strong>Roles</strong> column shows <code>starter.editor</code>. Press <strong>Change roles</strong>. A box opens headed &quot;Change roles for&quot; and your name.</li><li>Untick <code>starter.editor</code> and press <strong>Save roles</strong>. It worked when your row reads &quot;No roles&quot;.</li><li>Reload the app. The <strong>New note</strong> box is gone and the page reads &quot;You can read notes. Posting needs the <code>starter.editor</code> role. Ask whoever runs this app to give it to you.&quot; You can still open the app: taking a role away does not take away access.</li><li>Put the role back: <strong>Change roles</strong> on your row, tick <code>starter.editor</code>, <strong>Save roles</strong>. Reload the app. The <strong>New note</strong> box is back.</li></ol>
+<p>Nothing is redeployed. A role change reaches the app on your next request.</p>
+<h2 id="8-change-the-app-and-update-it">8. Change the app and update it<a class="d-anchor" href="#8-change-the-app-and-update-it" aria-label="Link to this section">#</a></h2>
+<p>Change the heading, commit and push:</p>
+<pre data-lang="bash"><code>node -e &#39;const f=&quot;server.js&quot;,fs=require(&quot;fs&quot;);fs.writeFileSync(f,fs.readFileSync(f,&quot;utf8&quot;).replace(&quot;&lt;h1&gt;Noticeboard&lt;/h1&gt;&quot;,&quot;&lt;h1&gt;Team board&lt;/h1&gt;&quot;))&#39;
+npm test
+git commit -am &quot;Rename the heading&quot;
+git push</code></pre>
+<p>Then in the portal open the app&#39;s <strong>People</strong> tab and find the card headed <strong>Deployment</strong>. It shows &quot;Current commit:&quot; and the commit now running. Press <strong>Update to latest commit</strong>.</p>
+<p>It worked when the card reads &quot;Updating to&quot; and the new commit, then &quot;Your app is now running the latest commit.&quot; Reload the app: the heading reads <strong>Team board</strong> and your notes are still there, because the starter&#39;s <code>vmnodes.json</code> says <code>&quot;database&quot;: true</code>. If the update fails, the card reads &quot;The update didn&#39;t go online, so your app is still running the previous version.&quot; and the old version keeps serving.</p>
+<p>An update does not give you any role the new commit adds. Give yourself a new role with <strong>Change roles</strong>.</p>
+<h2 id="what-to-read-next">What to read next<a class="d-anchor" href="#what-to-read-next" aria-label="Link to this section">#</a></h2>
+<p>You have now done every step an app goes through. Your own app differs from the starter in its name, its roles and what it keeps. Pick the how-to that matches your task from the <a href="/">index</a>.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a href="/reference/vmnodes-json"><code>vmnodes.json</code></a></li><li><a href="/concepts/apps">Apps</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/getting-started.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#before-you-start">Before you start</a></li><li class="l2"><a href="#1-download-the-starter">1. Download the starter</a></li><li class="l2"><a href="#2-run-it-on-your-computer">2. Run it on your computer</a></li><li class="l2"><a href="#3-push-it-to-a-git-repository">3. Push it to a git repository</a></li><li class="l2"><a href="#4-put-the-app-online">4. Put the app online</a></li><li class="l2"><a href="#5-watch-the-launch">5. Watch the launch</a></li><li class="l2"><a href="#6-open-the-app">6. Open the app</a></li><li class="l2"><a href="#7-take-the-role-off-yourself-then-put-it-back">7. Take the role off yourself, then put it back</a></li><li class="l2"><a href="#8-change-the-app-and-update-it">8. Change the app and update it</a></li><li class="l2"><a href="#what-to-read-next">What to read next</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

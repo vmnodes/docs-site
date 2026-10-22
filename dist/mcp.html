@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP server · VMnodes docs</title>
+<meta name="description" content="The VMnodes MCP server lets an AI assistant inspect, deploy and operate your organisation&#39;s apps through the same API the portal uses. This page lists every tool it offers, with an example call.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/mcp.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp" aria-current="page">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="mcp-server">MCP server</h1>
+<p>The VMnodes MCP server lets an AI assistant inspect, deploy and operate your organisation&#39;s apps through the same API the portal uses. This page lists every tool it offers, with an example call.</p>
+<blockquote><p><strong>Coming:</strong> a packaged MCP server you can add to your own assistant. Today it is run for you by your VMnodes contact, with an API token they issue.</p></blockquote>
+<p>Every tool acts with the authority of the API token it runs with, and every action is recorded against it. Approvals still need a person.</p>
+<h2 id="tools">Tools<a class="d-anchor" href="#tools" aria-label="Link to this section">#</a></h2>
+<div class="d-table"><table><thead><tr><th scope="col">Tool</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><a href="#createapplication"><code>create_application</code></a></td><td>Creates an application with a staging and a production environment.</td></tr><tr><td><a href="#inspectapplication"><code>inspect_application</code></a></td><td>Shows one application, its environments and the recent deployments of each.</td></tr><tr><td><a href="#deployapplication"><code>deploy_application</code></a></td><td>Builds a public git repository, or reuses an image digest, and deploys it to an environment.</td></tr><tr><td><a href="#getapplicationstatus"><code>get_application_status</code></a></td><td>Reports the latest deployment of an environment and the four before it.</td></tr><tr><td><a href="#getlogs"><code>get_logs</code></a></td><td>Reads recent log lines for an environment, optionally filtered by a substring.</td></tr><tr><td><a href="#gethealth"><code>get_health</code></a></td><td>Reports the health of a host and its nodes, with a capacity snapshot.</td></tr><tr><td><a href="#diagnoseapplication"><code>diagnose_application</code></a></td><td>Explains why an application is broken in one call.</td></tr><tr><td><a href="#rollbackapplication"><code>rollback_application</code></a></td><td>Rolls an environment back to its previous known-good deployment, or to a named one.</td></tr><tr><td><a href="#stopapplication"><code>stop_application</code></a></td><td>Pauses an environment by stopping its container, without losing the deployment.</td></tr><tr><td><a href="#startapplication"><code>start_application</code></a></td><td>Resumes a stopped environment by redeploying the image it was running.</td></tr><tr><td><a href="#getcapacity"><code>get_capacity</code></a></td><td>Reports a host&#39;s capacity, reserved resources, utilisation and estimated headroom.</td></tr><tr><td><a href="#getbackupstatus"><code>get_backup_status</code></a></td><td>Reports a host&#39;s backup health: last snapshot, last database dump and any failing backups.</td></tr><tr><td><a href="#requestdatabase"><code>request_database</code></a></td><td>Provisions the application&#39;s own PostgreSQL database; safe to call again.</td></tr><tr><td><a href="#setsecret"><code>set_secret</code></a></td><td>Sets a secret on one environment; the value is write-only and reaches the app on its next deploy.</td></tr><tr><td><a href="#discoverdata"><code>discover_data</code></a></td><td>Lists the shared entities the caller can discover, with the fields and actions each allows.</td></tr><tr><td><a href="#describeentity"><code>describe_entity</code></a></td><td>Describes one shared entity: its version, source, classification and visible fields.</td></tr><tr><td><a href="#queryentity"><code>query_entity</code></a></td><td>Runs one governed query against a shared entity and returns rows with provenance.</td></tr><tr><td><a href="#askdata"><code>ask_data</code></a></td><td>Answers one business question in plain language from data the caller may read.</td></tr><tr><td><a href="#listactions"><code>list_actions</code></a></td><td>Lists the actions the caller may propose or approve, with input schemas and risk.</td></tr><tr><td><a href="#proposeaction"><code>propose_action</code></a></td><td>Proposes one typed action; it queues at once or waits for a different person to approve.</td></tr><tr><td><a href="#getactionstatus"><code>get_action_status</code></a></td><td>Reports the status and result of one action invocation.</td></tr><tr><td><a href="#listpendingapprovals"><code>list_pending_approvals</code></a></td><td>Lists action proposals waiting for approval that the caller may approve.</td></tr><tr><td><a href="#listincidents"><code>list_incidents</code></a></td><td>Lists the organisation&#39;s incidents, optionally only those with one status.</td></tr><tr><td><a href="#getincident"><code>get_incident</code></a></td><td>Shows one incident with its full timeline.</td></tr><tr><td><a href="#remediateincident"><code>remediate_incident</code></a></td><td>Proposes a governed action as a fix for an incident.</td></tr></tbody></table></div>
+<h2 id="createapplication">create_application<a class="d-anchor" href="#createapplication" aria-label="Link to this section">#</a></h2>
+<p>Creates an application with a staging and a production environment.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>name</code></td><td>string</td><td>yes</td><td>machine name, lowercase (e.g. &#39;timesheets&#39;)</td></tr><tr><td><code>displayName</code></td><td>string</td><td>no</td><td></td></tr><tr><td><code>port</code></td><td>number</td><td>yes</td><td>port the app listens on</td></tr><tr><td><code>healthEndpoint</code></td><td>string</td><td>no</td><td>HTTP path for health checks, e.g. /health</td></tr><tr><td><code>type</code></td><td>string</td><td>no</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;name&quot;: &quot;quotes&quot;,
+  &quot;port&quot;: 3000,
+  &quot;displayName&quot;: &quot;Quotes&quot;,
+  &quot;type&quot;: &quot;web&quot;,
+  &quot;healthEndpoint&quot;: &quot;/health&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The new application with its id, name, port and resource profile.</p>
+<p><strong>Calls:</strong> <code>POST /v1/applications</code></p>
+<h2 id="inspectapplication">inspect_application<a class="d-anchor" href="#inspectapplication" aria-label="Link to this section">#</a></h2>
+<p>Shows one application, its environments and the recent deployments of each.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>application</code>, <code>environments</code> and <code>deployments</code> keyed by environment name.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}</code>, <code>GET /v1/applications/{appId}/environments</code>, <code>GET /v1/applications/{appId}/deployments?environmentId={environmentId}</code></p>
+<h2 id="deployapplication">deploy_application<a class="d-anchor" href="#deployapplication" aria-label="Link to this section">#</a></h2>
+<p>Builds a public git repository, or reuses an image digest, and deploys it to an environment.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td>&#39;staging&#39; or &#39;production&#39;</td></tr><tr><td><code>gitUrl</code></td><td>string</td><td>no</td><td>public git repo to build (Dockerfile required)</td></tr><tr><td><code>gitRef</code></td><td>string</td><td>no</td><td></td></tr><tr><td><code>imageDigest</code></td><td>string</td><td>no</td><td>skip the build and deploy an existing digest ref</td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;staging&quot;,
+  &quot;gitUrl&quot;: &quot;https://github.com/example/quotes.git&quot;,
+  &quot;gitRef&quot;: &quot;main&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The new deployment, with status <code>deploying</code>; poll <code>get_application_status</code> for <code>active</code> or <code>failed</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>POST /v1/applications/{appId}/builds</code>, <code>POST /v1/applications/{appId}/deployments</code></p>
+<h2 id="getapplicationstatus">get_application_status<a class="d-anchor" href="#getapplicationstatus" aria-label="Link to this section">#</a></h2>
+<p>Reports the latest deployment of an environment and the four before it.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;production&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>latest</code> (the newest deployment, or null) and <code>history</code> (up to four earlier ones).</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>GET /v1/applications/{appId}/deployments?environmentId={environmentId}</code></p>
+<h2 id="getlogs">get_logs<a class="d-anchor" href="#getlogs" aria-label="Link to this section">#</a></h2>
+<p>Reads recent log lines for an environment, optionally filtered by a substring.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>sinceMinutes</code></td><td>number</td><td>no</td><td>look-back window, default 60</td></tr><tr><td><code>search</code></td><td>string</td><td>no</td><td>substring filter</td></tr><tr><td><code>limit</code></td><td>number</td><td>no</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;production&quot;,
+  &quot;sinceMinutes&quot;: 30,
+  &quot;search&quot;: &quot;error&quot;,
+  &quot;limit&quot;: 50
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>lines</code>, each a timestamp and a log line.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>GET /v1/applications/{appId}/logs</code></p>
+<h2 id="gethealth">get_health<a class="d-anchor" href="#gethealth" aria-label="Link to this section">#</a></h2>
+<p>Reports the health of a host and its nodes, with a capacity snapshot.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>hostId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;hostId&quot;: &quot;host_00000000000000000000000003&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>host</code>, <code>nodes</code> and <code>capacity</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/hosts/{hostId}</code>, <code>GET /v1/hosts/{hostId}/nodes</code>, <code>GET /v1/hosts/{hostId}/capacity</code></p>
+<h2 id="diagnoseapplication">diagnose_application<a class="d-anchor" href="#diagnoseapplication" aria-label="Link to this section">#</a></h2>
+<p>Explains why an application is broken in one call.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;production&quot;
+}</code></pre>
+<p><strong>Returns:</strong> A plain <code>summary</code> plus the latest deployment, node health and recent error lines.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>GET /v1/applications/{appId}/diagnose</code></p>
+<h2 id="rollbackapplication">rollback_application<a class="d-anchor" href="#rollbackapplication" aria-label="Link to this section">#</a></h2>
+<p>Rolls an environment back to its previous known-good deployment, or to a named one.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>toDeploymentId</code></td><td>string</td><td>no</td><td>target deployment; defaults to the previous known-good</td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;production&quot;,
+  &quot;toDeploymentId&quot;: &quot;dep_00000000000000000000000008&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The new deployment that restores the older image, with status <code>deploying</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>POST /v1/applications/{appId}/rollback</code></p>
+<h2 id="stopapplication">stop_application<a class="d-anchor" href="#stopapplication" aria-label="Link to this section">#</a></h2>
+<p>Pauses an environment by stopping its container, without losing the deployment.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;staging&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>stoppedAt</code> and <code>stoppedBy</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>POST /v1/applications/{appId}/environments/{environmentId}/stop</code></p>
+<h2 id="startapplication">start_application<a class="d-anchor" href="#startapplication" aria-label="Link to this section">#</a></h2>
+<p>Resumes a stopped environment by redeploying the image it was running.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;staging&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The new deployment, with status <code>deploying</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>POST /v1/applications/{appId}/environments/{environmentId}/start</code></p>
+<h2 id="getcapacity">get_capacity<a class="d-anchor" href="#getcapacity" aria-label="Link to this section">#</a></h2>
+<p>Reports a host&#39;s capacity, reserved resources, utilisation and estimated headroom.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>hostId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;hostId&quot;: &quot;host_00000000000000000000000003&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The host&#39;s capacity figures as one object.</p>
+<p><strong>Calls:</strong> <code>GET /v1/hosts/{hostId}/capacity</code></p>
+<h2 id="getbackupstatus">get_backup_status<a class="d-anchor" href="#getbackupstatus" aria-label="Link to this section">#</a></h2>
+<p>Reports a host&#39;s backup health: last snapshot, last database dump and any failing backups.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>hostId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;hostId&quot;: &quot;host_00000000000000000000000003&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The host&#39;s backup status as one object.</p>
+<p><strong>Calls:</strong> <code>GET /v1/hosts/{hostId}/backups</code></p>
+<h2 id="requestdatabase">request_database<a class="d-anchor" href="#requestdatabase" aria-label="Link to this section">#</a></h2>
+<p>Provisions the application&#39;s own PostgreSQL database; safe to call again.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>databaseId</code>, <code>name</code>, <code>roleName</code> and status <code>provisioning</code>.</p>
+<p><strong>Calls:</strong> <code>POST /v1/applications/{appId}/database</code></p>
+<h2 id="setsecret">set_secret<a class="d-anchor" href="#setsecret" aria-label="Link to this section">#</a></h2>
+<p>Sets a secret on one environment; the value is write-only and reaches the app on its next deploy.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>applicationId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>environment</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>name</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>value</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environment&quot;: &quot;production&quot;,
+  &quot;name&quot;: &quot;QUOTES_SIGNING_KEY&quot;,
+  &quot;value&quot;: &quot;example-not-a-real-secret&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The secret&#39;s name and version; the value is never returned.</p>
+<p><strong>Calls:</strong> <code>GET /v1/applications/{appId}/environments</code>, <code>PUT /v1/applications/{appId}/secrets</code></p>
+<h2 id="discoverdata">discover_data<a class="d-anchor" href="#discoverdata" aria-label="Link to this section">#</a></h2>
+<p>Lists the shared entities the caller can discover, with the fields and actions each allows.</p>
+<p>No arguments.</p>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{}</code></pre>
+<p><strong>Returns:</strong> An array of entities, each with <code>entity</code>, <code>version</code>, <code>description</code>, <code>actions</code> and <code>fields</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/data/entities</code></p>
+<h2 id="describeentity">describe_entity<a class="d-anchor" href="#describeentity" aria-label="Link to this section">#</a></h2>
+<p>Describes one shared entity: its version, source, classification and visible fields.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>entity</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;quotes.quote&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>entity</code>, <code>version</code>, <code>description</code>, <code>classification</code>, <code>source</code> and <code>fields</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/data/entities/{entity}</code></p>
+<h2 id="queryentity">query_entity<a class="d-anchor" href="#queryentity" aria-label="Link to this section">#</a></h2>
+<p>Runs one governed query against a shared entity and returns rows with provenance.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>entity</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>select</code></td><td>array</td><td>yes</td><td>explicit field names</td></tr><tr><td><code>filter</code></td><td>array</td><td>no</td><td></td></tr><tr><td><code>orderBy</code></td><td>object</td><td>no</td><td></td></tr><tr><td><code>limit</code></td><td>number</td><td>no</td><td></td></tr><tr><td><code>aggregate</code></td><td>object</td><td>no</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;quotes.quote&quot;,
+  &quot;select&quot;: [
+    &quot;quoteNumber&quot;,
+    &quot;customer&quot;,
+    &quot;total&quot;
+  ],
+  &quot;filter&quot;: [
+    {
+      &quot;field&quot;: &quot;total&quot;,
+      &quot;op&quot;: &quot;gte&quot;,
+      &quot;value&quot;: 1000
+    }
+  ],
+  &quot;orderBy&quot;: {
+    &quot;field&quot;: &quot;total&quot;,
+    &quot;dir&quot;: &quot;desc&quot;
+  },
+  &quot;limit&quot;: 20
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>rows</code>, <code>provenance</code>, <code>rowCount</code> and whether the result was <code>truncated</code>.</p>
+<p><strong>Calls:</strong> <code>POST /v1/data/query</code></p>
+<h2 id="askdata">ask_data<a class="d-anchor" href="#askdata" aria-label="Link to this section">#</a></h2>
+<p>Answers one business question in plain language from data the caller may read.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>question</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;question&quot;: &quot;What is the total value of quotes sent this month, by customer?&quot;
+}</code></pre>
+<p><strong>Returns:</strong> A cited <code>answer</code>, the <code>queries</code> that ran, their <code>rows</code> and <code>provenance</code>.</p>
+<p><strong>Calls:</strong> <code>POST /v1/data/ask</code></p>
+<h2 id="listactions">list_actions<a class="d-anchor" href="#listactions" aria-label="Link to this section">#</a></h2>
+<p>Lists the actions the caller may propose or approve, with input schemas and risk.</p>
+<p>No arguments.</p>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{}</code></pre>
+<p><strong>Returns:</strong> An array of actions, each with <code>action</code>, <code>description</code>, <code>risk</code>, <code>approvalPolicy</code> and <code>inputSchema</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/actions</code></p>
+<h2 id="proposeaction">propose_action<a class="d-anchor" href="#proposeaction" aria-label="Link to this section">#</a></h2>
+<p>Proposes one typed action; it queues at once or waits for a different person to approve.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>action</code></td><td>string</td><td>yes</td><td>namespace.name, e.g. &#39;vmnodes.sync-xero&#39;</td></tr><tr><td><code>input</code></td><td>object</td><td>no</td><td></td></tr><tr><td><code>idempotencyKey</code></td><td>string</td><td>no</td><td>supply to dedupe retried proposals</td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;action&quot;: &quot;quotes.send-quote&quot;,
+  &quot;input&quot;: {
+    &quot;quoteNumber&quot;: &quot;Q-1042&quot;
+  },
+  &quot;idempotencyKey&quot;: &quot;send-Q-1042-2026-10-22&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>invocationId</code>, <code>status</code> (<code>proposed</code> or <code>queued</code>) and <code>deduplicated</code>.</p>
+<p><strong>Calls:</strong> <code>POST /v1/actions/propose</code></p>
+<h2 id="getactionstatus">get_action_status<a class="d-anchor" href="#getactionstatus" aria-label="Link to this section">#</a></h2>
+<p>Reports the status and result of one action invocation.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>invocationId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;invocationId&quot;: &quot;inv_01JBX3VSJ2D3QV2Z0B17EQ78VS&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>status</code>, <code>input</code>, <code>result</code>, <code>attempts</code> and the proposer and approver.</p>
+<p><strong>Calls:</strong> <code>GET /v1/actions/{invocationId}</code></p>
+<h2 id="listpendingapprovals">list_pending_approvals<a class="d-anchor" href="#listpendingapprovals" aria-label="Link to this section">#</a></h2>
+<p>Lists action proposals waiting for approval that the caller may approve.</p>
+<p>No arguments.</p>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{}</code></pre>
+<p><strong>Returns:</strong> An array of pending proposals, each with <code>invocationId</code>, <code>action</code>, <code>input</code> and <code>proposedBy</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/actions/pending</code></p>
+<h2 id="listincidents">list_incidents<a class="d-anchor" href="#listincidents" aria-label="Link to this section">#</a></h2>
+<p>Lists the organisation&#39;s incidents, optionally only those with one status.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>status</code></td><td>string</td><td>no</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;status&quot;: &quot;open&quot;
+}</code></pre>
+<p><strong>Returns:</strong> An array of incidents, each with <code>incidentId</code>, <code>title</code>, <code>status</code>, <code>priority</code> and <code>openedAt</code>.</p>
+<p><strong>Calls:</strong> <code>GET /v1/incidents</code></p>
+<h2 id="getincident">get_incident<a class="d-anchor" href="#getincident" aria-label="Link to this section">#</a></h2>
+<p>Shows one incident with its full timeline.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>incidentId</code></td><td>string</td><td>yes</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;incidentId&quot;: &quot;inc_01JBX3CNKGNNSTZAG068YNXZ21&quot;
+}</code></pre>
+<p><strong>Returns:</strong> The incident plus a <code>timeline</code> of signals, comments and remediation outcomes.</p>
+<p><strong>Calls:</strong> <code>GET /v1/incidents/{incidentId}</code></p>
+<h2 id="remediateincident">remediate_incident<a class="d-anchor" href="#remediateincident" aria-label="Link to this section">#</a></h2>
+<p>Proposes a governed action as a fix for an incident.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Argument</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>incidentId</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>action</code></td><td>string</td><td>yes</td><td></td></tr><tr><td><code>input</code></td><td>object</td><td>no</td><td></td></tr></tbody></table></div>
+<p><strong>Example arguments</strong></p>
+<pre data-lang="json"><code>{
+  &quot;incidentId&quot;: &quot;inc_01JBX3CNKGNNSTZAG068YNXZ21&quot;,
+  &quot;action&quot;: &quot;quotes.restart-worker&quot;,
+  &quot;input&quot;: {
+    &quot;worker&quot;: &quot;mailer&quot;
+  }
+}</code></pre>
+<p><strong>Returns:</strong> An object with <code>invocationId</code> and <code>status</code>; the proposal follows the action&#39;s approval policy.</p>
+<p><strong>Calls:</strong> <code>POST /v1/incidents/{incidentId}/remediate</code></p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li></ul>
+  <p class="d-meta"><a href="/mcp.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#tools">Tools</a></li><li class="l2"><a href="#createapplication">createapplication</a></li><li class="l2"><a href="#inspectapplication">inspectapplication</a></li><li class="l2"><a href="#deployapplication">deployapplication</a></li><li class="l2"><a href="#getapplicationstatus">getapplicationstatus</a></li><li class="l2"><a href="#getlogs">getlogs</a></li><li class="l2"><a href="#gethealth">gethealth</a></li><li class="l2"><a href="#diagnoseapplication">diagnoseapplication</a></li><li class="l2"><a href="#rollbackapplication">rollbackapplication</a></li><li class="l2"><a href="#stopapplication">stopapplication</a></li><li class="l2"><a href="#startapplication">startapplication</a></li><li class="l2"><a href="#getcapacity">getcapacity</a></li><li class="l2"><a href="#getbackupstatus">getbackupstatus</a></li><li class="l2"><a href="#requestdatabase">requestdatabase</a></li><li class="l2"><a href="#setsecret">setsecret</a></li><li class="l2"><a href="#discoverdata">discoverdata</a></li><li class="l2"><a href="#describeentity">describeentity</a></li><li class="l2"><a href="#queryentity">queryentity</a></li><li class="l2"><a href="#askdata">askdata</a></li><li class="l2"><a href="#listactions">listactions</a></li><li class="l2"><a href="#proposeaction">proposeaction</a></li><li class="l2"><a href="#getactionstatus">getactionstatus</a></li><li class="l2"><a href="#listpendingapprovals">listpendingapprovals</a></li><li class="l2"><a href="#listincidents">listincidents</a></li><li class="l2"><a href="#getincident">getincident</a></li><li class="l2"><a href="#remediateincident">remediateincident</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

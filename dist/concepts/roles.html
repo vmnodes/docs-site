@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roles · VMnodes docs</title>
+<meta name="description" content="Understand how an app declares roles, how an administrator gives them to people, and how the app checks them. Read this before you let anyone do something that only some people should do.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/concepts/roles.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles" aria-current="page">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="roles">Roles</h1>
+<p>Understand how an app declares roles, how an administrator gives them to people, and how the app checks them. Read this before you let anyone do something that only some people should do.</p>
+<p>A role is a name like <code>starter.editor</code> that your app checks. The app declares it, an administrator gives it to people, and the identity header carries it into every request.</p>
+<h2 id="declare-roles-in-vmnodesjson">Declare roles in <code>vmnodes.json</code><a class="d-anchor" href="#declare-roles-in-vmnodesjson" aria-label="Link to this section">#</a></h2>
+<p>Roles live in <code>vmnodes.json</code> at the repository root. This is the starter&#39;s whole file:</p>
+<pre data-lang="json"><code>{
+  &quot;apiVersion&quot;: &quot;vmnodes.com/v1&quot;,
+  &quot;roles&quot;: [
+    {
+      &quot;name&quot;: &quot;starter.editor&quot;,
+      &quot;description&quot;: &quot;Can post and edit messages.&quot;
+    }
+  ],
+  &quot;database&quot;: true,
+  &quot;publishes&quot;: [&quot;note/v1&quot;]
+}</code></pre>
+<ul><li>Every role needs a <code>description</code>. It is what an administrator reads before giving the role, so say what the person can then do, in plain words.</li><li>A name is lowercase letters, digits and hyphens, starts with a letter, and has at most one dot: <code>leave-requests.approver</code>. Each side of the dot is 2 to 31 characters. Most apps use their own name before the dot. <code>Leave_Requests.Approver</code> is refused.</li><li>A name must be declared once. A mistake in the file (an unknown key, a bad name, a duplicate, a missing description) stops the build, and the launch page shows only a generic sentence. Check the file against <a href="/reference/vmnodes-json"><code>vmnodes.json</code></a> before you push.</li><li>VMnodes reads the file from the exact commit it builds. No file means the app has no roles.</li><li>The file must be an ordinary file under 64 KiB. A symlink is refused.</li></ul>
+<p>The part before the dot need not match the app&#39;s name. The starter keeps the two apart in <code>server.js</code>: the app&#39;s name comes from <code>VMNODES_APP_NAME</code>, and the role prefix is a constant.</p>
+<pre data-lang="js"><code>// Must match the role names in vmnodes.json exactly (&quot;starter.editor&quot;).
+const ROLE_PREFIX = &quot;starter&quot;;
+const EDITOR_ROLE = `${ROLE_PREFIX}.editor`;</code></pre>
+<blockquote><p><strong>Trap:</strong> the string in <code>vmnodes.json</code> and the string your code checks must be identical. A role your code checks but <code>vmnodes.json</code> does not declare can never be given to anyone.</p></blockquote>
+<h2 id="give-roles-to-people">Give roles to people<a class="d-anchor" href="#give-roles-to-people" aria-label="Link to this section">#</a></h2>
+<p>Declaring a role gives it to nobody except the person who launches the app.</p>
+<ul><li><strong>At launch</strong> the person who puts the app online gets every role the app declares. The launch page says &quot;You have every role acme-notes declares: starter.editor.&quot;</li><li><strong>After that</strong> an administrator opens the app&#39;s <strong>People</strong> tab, presses <strong>Change roles</strong> on a person, ticks roles and presses <strong>Save roles</strong>. The person&#39;s row then lists them, or reads &quot;No roles&quot;.</li><li><strong>An update does not give new roles.</strong> When a later commit adds a role, nobody has it, not even you. Give it with <strong>Change roles</strong>.</li><li><strong>A role gives access.</strong> Giving someone a role also lets them open the app. Taking a role away does not take away access.</li><li><strong>A group can carry a role.</strong> Attach a group on the <strong>People</strong> tab and pick a role: everyone in the group holds it, including people added later. A role someone holds through a group arrives in <code>roles</code> the same way.</li><li><strong>No declared roles, nothing to give.</strong> The <strong>People</strong> tab reads &quot;No roles yet&quot; and &quot;&lt;app&gt; has not declared any roles, so there is nothing to assign here.&quot;</li></ul>
+<p>A role reaches your app on the person&#39;s next request, in <code>user.roles</code>. Nothing is cached and nothing is redeployed.</p>
+<h2 id="check-roles-on-the-server">Check roles on the server<a class="d-anchor" href="#check-roles-on-the-server" aria-label="Link to this section">#</a></h2>
+<p>Check the role in the server on every request that needs it. Hiding a button stops nobody who sends the request directly.</p>
+<pre data-lang="js"><code>identity.requireRole(user, EDITOR_ROLE); // checked on the SERVER. Hiding a button is not security.</code></pre>
+<p><code>requireRole</code> throws an <code>IdentityError</code> with status 403 and the message <code>role &#39;starter.editor&#39; required</code>. Return that status to the caller. A 403 from your app means the person is signed in and has access but lacks the role. It is not the gateway&#39;s &quot;Not authorised&quot; page, which means the person has no access at all. See <a href="/concepts/sign-in-and-identity">Sign-in and identity</a>.</p>
+<p>Test both directions before you call a role check done: a person without the role gets 403, and a person with it gets through. Locally, <code>/_as/reader</code> and <code>/_as/editor</code> sign you in as each.</p>
+<h2 id="retired-roles">Retired roles<a class="d-anchor" href="#retired-roles" aria-label="Link to this section">#</a></h2>
+<p>Taking a role out of <code>vmnodes.json</code> retires it when that commit deploys. A retired role no longer arrives in <code>user.roles</code> and cannot be given to anyone. People who held it stay listed.</p>
+<ul><li>The <strong>People</strong> tab shows a notice, for example &quot;2 people hold roles your app no longer uses&quot;. It opens a page headed &quot;Clear roles your app no longer uses&quot; with a <strong>Clear all</strong> button. Clearing removes the role from them and not their access.</li><li>A commit with no <code>vmnodes.json</code> declares no roles, so deploying it retires them all.</li><li>Putting the role back in <code>vmnodes.json</code> makes it available again but gives it to nobody. The <strong>People</strong> tab offers <strong>Give it back to N people who had it</strong>, and an administrator decides.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a href="/reference/vmnodes-json"><code>vmnodes.json</code></a></li><li><a href="/concepts/orgs-and-people">Orgs and people</a></li><li><a href="/how-to/approvals">Submit and approve</a></li></ul>
+  <p class="d-meta"><a href="/concepts/roles.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#declare-roles-in-vmnodesjson">Declare roles in vmnodes.json</a></li><li class="l2"><a href="#give-roles-to-people">Give roles to people</a></li><li class="l2"><a href="#check-roles-on-the-server">Check roles on the server</a></li><li class="l2"><a href="#retired-roles">Retired roles</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

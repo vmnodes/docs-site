@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI completions · VMnodes docs</title>
+<meta name="description" content="Run a model completion without holding model credentials. Needs the ai.complete scope, which the manifest permissions.ai.complete field requests. Prompt and completion text is never stored by the platform; only lengths are.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/ai.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="ai-completions">AI completions</h1>
+<p>Run a model completion without holding model credentials. Needs the <code>ai.complete</code> scope, which the manifest <code>permissions.ai.complete</code> field requests. Prompt and completion text is never stored by the platform; only lengths are.</p>
+<h2 id="complete-a-prompt">Complete a prompt<a class="d-anchor" href="#complete-a-prompt" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/ai/complete</code></p>
+<p>Runs a model completion and returns the text. Pass <code>jsonSchema</code> to get JSON that matches a schema.</p>
+<p><strong>Auth:</strong> API token with the ai.complete scope.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/ai/complete&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;prompt&quot;:&quot;Draft a two-sentence follow-up for quote Q-1042 sent to Example Pty Ltd.&quot;,&quot;system&quot;:&quot;You write short, friendly business emails.&quot;,&quot;maxTokens&quot;:300}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;prompt&quot;: &quot;Draft a two-sentence follow-up for quote Q-1042 sent to Example Pty Ltd.&quot;,
+  &quot;system&quot;: &quot;You write short, friendly business emails.&quot;,
+  &quot;maxTokens&quot;: 300
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;completion&quot;: &quot;Hi Pat, I wanted to check that quote Q-1042 reached you. Let me know if you have any questions.&quot;,
+  &quot;model&quot;: &quot;example-model&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>403</td><td><code>ai/forbidden</code></td><td><code>token lacks the ai.complete scope</code></td></tr><tr><td>400</td><td><code>ai/bad-prompt</code></td><td><code>prompt is required (max 40000 chars)</code></td></tr><tr><td>400</td><td><code>ai/bad-system</code></td><td><code>system prompt too long (max 10000 chars)</code></td></tr><tr><td>429</td><td><code>ai/rate-limited</code></td><td><code>hourly completion limit reached</code></td></tr><tr><td>502</td><td><code>ai/failed</code></td><td><code>model call failed; retry later</code></td></tr><tr><td>400</td><td><code>ai/bad-schema</code></td><td><code>jsonSchema was rejected by the model host — schemas are normalised to strict mode (all properties required; use a null type for optional fields), but this one still failed validation</code></td></tr></tbody></table></div>
+<p><code>system</code> and <code>maxTokens</code> are optional; <code>maxTokens</code> is capped at 2000. <code>jsonSchema</code> is <code>{name, schema}</code>. When no model is set up the 503 body is a bare <code>{&quot;error&quot;:&quot;no model is configured on this control plane&quot;}</code> with no code. Limits: 60 completions per hour per caller and 200 per hour per organisation. The 502 is safe to retry; <code>ai/bad-schema</code> is not.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/ai.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#complete-a-prompt">Complete a prompt</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connectors · VMnodes docs</title>
+<meta name="description" content="Connectors link the organisation to outside systems. Setting one up is an operator step: ask your VMnodes contact.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/connectors.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="connectors">Connectors</h1>
+<p>Connectors link the organisation to outside systems. Setting one up is an operator step: ask your VMnodes contact.</p>
+<h2 id="list-connectors">List connectors<a class="d-anchor" href="#list-connectors" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/connectors</code></p>
+<p>Lists the organisation&#39;s connectors with their state.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/connectors&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;id&quot;: &quot;conn_01JBX3K00ZAR68QNR66YFVTGS1&quot;,
+    &quot;kind&quot;: &quot;xero&quot;,
+    &quot;status&quot;: &quot;connected&quot;,
+    &quot;tenantName&quot;: &quot;Example Pty Ltd&quot;,
+    &quot;lastSyncAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+    &quot;lastError&quot;: null
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>501</td><td><code>connector/not-configured</code></td><td><code>no connectors configured</code></td></tr></tbody></table></div>
+<h2 id="sync-xero">Sync Xero<a class="d-anchor" href="#sync-xero" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/connectors/xero/sync</code></p>
+<p>Pulls contacts and invoices from the connected Xero organisation into the platform.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/connectors/xero/sync&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;contacts&quot;: 42,
+  &quot;invoices&quot;: 118,
+  &quot;lines&quot;: 307,
+  &quot;tenant&quot;: &quot;Example Pty Ltd&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>501</td><td><code>connector/not-configured</code></td><td><code>Xero is not configured</code></td></tr><tr><td>422</td><td><code>xero/not-connected</code></td><td><code>connect Xero first</code></td></tr><tr><td>422</td><td><code>xero/disabled</code></td><td><code>the Xero connection is disabled</code></td></tr></tbody></table></div>
+<p>Connecting Xero is an operator step: ask your VMnodes contact.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/connectors.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#list-connectors">List connectors</a></li><li class="l2"><a href="#sync-xero">Sync Xero</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Publish and query API · VMnodes docs</title>
+<meta name="description" content="Your app shares records with other apps in the org by registering an entity and then publishing records to it, with two calls. Read this page when you add sharing to an app, when a publish call is refused, or when you need to read shared records back.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/reference/publish-api.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api" aria-current="page">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="publish-and-query-api">Publish and query API</h1>
+<p>Your app shares records with other apps in the org by registering an entity and then publishing records to it, with two calls. Read this page when you add sharing to an app, when a publish call is refused, or when you need to read shared records back.</p>
+<h2 id="before-you-call">Before you call<a class="d-anchor" href="#before-you-call" aria-label="Link to this section">#</a></h2>
+<ol><li>Declare the entity in <code>vmnodes.json</code>, for example <code>&quot;publishes&quot;: [&quot;note/v1&quot;]</code>, and update the app. See <a href="/reference/vmnodes-json#publishes">vmnodes.json reference</a>. This gives the app its publish token.</li><li>Your app reads two values from its environment: <code>VMNODES_PUBLISH_TOKEN</code> and <code>VMNODES_API_URL</code>. See <a href="/reference/environment#secrets">Environment variables</a>.</li><li>Every call sends <code>Authorization: Bearer $VMNODES_PUBLISH_TOKEN</code> to <code>VMNODES_API_URL</code>.</li></ol>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/publish/entities&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_PUBLISH_TOKEN&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{&quot;entity&quot;:&quot;expenses.claim&quot;,&quot;version&quot;:1,&quot;description&quot;:&quot;Expense claims submitted by staff.&quot;,&quot;queryableFields&quot;:[{&quot;name&quot;:&quot;amount&quot;,&quot;type&quot;:&quot;number&quot;}]}&#39;</code></pre>
+<p>The token must belong to an app. A token that does not is refused with 403 <code>publish/workload-token-required</code>: <code>publishing needs a workload token bound to an application</code>. The API allows 300 requests a minute, and a request body larger than 1 MiB is refused. An app that declares no entity in <code>publishes</code> has no token and cannot publish. See <a href="#reading-shared-records">Reading with no token</a> for what that means for an app that only reads.</p>
+<h3 id="errors-in-every-response">Errors in every response<a class="d-anchor" href="#errors-in-every-response" aria-label="Link to this section">#</a></h3>
+<p>An error is <code>{&quot;error&quot;:{&quot;code&quot;:&quot;&lt;code&gt;&quot;,&quot;message&quot;:&quot;&lt;message&gt;&quot;}}</code>. Most checks answer 422. Some answer 403, 404, 409 or 501, and the table below gives the code and message.</p>
+<p>A 500 answers with: <code>the platform failed handling this request. Quote reference &lt;request id&gt; — the detail is in the platform log, deliberately not in this response.</code> Quote the reference to your VMnodes contact.</p>
+<h2 id="register-an-entity">Register an entity<a class="d-anchor" href="#register-an-entity" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/publish/entities</code></p>
+<p>Register once per entity, after the app is live. Registering the same entity again replaces its list of queryable fields.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>entity</code></td><td>string</td><td>yes</td><td><code>&lt;app&gt;.&lt;name&gt;</code>: lowercase, with no version. The prefix is your app&#39;s name, <code>VMNODES_APP_NAME</code>.</td></tr><tr><td><code>version</code></td><td>integer</td><td>no</td><td>Defaults to 1; 0 or a missing value gives 1. It must match the <code>/vN</code> in <code>vmnodes.json</code>.</td></tr><tr><td><code>description</code></td><td>string</td><td>yes</td><td>What this data is. A person reads it when deciding whether to turn sharing on.</td></tr><tr><td><code>classification</code></td><td>string</td><td>no</td><td>Defaults to <code>internal</code>.</td></tr><tr><td><code>queryableFields</code></td><td>array of <code>{name, type}</code></td><td>yes, at least one</td><td>The fields others may read. <code>type</code> is <code>string</code>, <code>number</code>, <code>boolean</code> or <code>timestamp</code>.</td></tr><tr><td><code>grain</code></td><td>array of field names</td><td>no</td><td>The fields that identify one record. Each must be in <code>queryableFields</code>.</td></tr></tbody></table></div>
+<p>A successful call answers 201:</p>
+<pre data-lang="json"><code>{ &quot;entityDefinitionId&quot;: &quot;…&quot;, &quot;removedQueryableFields&quot;: [], &quot;notSharedFields&quot;: [&quot;amount&quot;] }</code></pre>
+<p><code>removedQueryableFields</code> and <code>notSharedFields</code> appear when they are not empty.</p>
+<h3 id="fields-start-off-not-shared">Fields start off not shared<a class="d-anchor" href="#fields-start-off-not-shared" aria-label="Link to this section">#</a></h3>
+<p>A field of a published entity is not shared until an administrator turns it on: in the portal, under <strong>Shares</strong>. Until then:</p>
+<ul><li><code>notSharedFields</code> lists the field.</li><li>Publishing drops that field from each record. The platform keeps only the values of fields that are both queryable and shared.</li><li>Turning a field on does not fill in records already published. Publish them again.</li><li>Turning a field off deletes the stored values for it.</li></ul>
+<p>An entity has one owning app, for good. Another app cannot publish to it.</p>
+<h3 id="register-errors">Register errors<a class="d-anchor" href="#register-errors" aria-label="Link to this section">#</a></h3>
+<div class="d-table"><table><thead><tr><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td><code>data/bad-entity-name</code></td><td><code>entity names are namespace.name, lowercase, with NO version suffix — &#39;&lt;entity&gt;&#39; is not one. A manifest declares &#39;name/vN&#39;; this field takes the bare name and &#39;version&#39; separately.</code></td></tr><tr><td><code>data/description-required</code></td><td><code>description is required — it is what a human reads when deciding whether to grant access to this dataset</code></td></tr><tr><td><code>data/no-queryable-fields</code></td><td><code>queryableFields must list at least one field — an entity nobody can query is not publishable</code></td></tr><tr><td><code>data/bad-queryable-field</code></td><td><code>every queryable field needs a name</code></td></tr><tr><td><code>data/bad-field-type</code></td><td><code>field &#39;&lt;name&gt;&#39; has type &#39;&lt;type&gt;&#39; — must be string, number, boolean or timestamp</code></td></tr><tr><td><code>data/bad-grain</code></td><td><code>grain names &lt;field, field&gt;, which are not queryable fields on this entity</code></td></tr><tr><td><code>publish/namespace-denied</code></td><td><code>applications publish only in their own namespace — &#39;&lt;entity&gt;&#39; must start with &#39;&lt;app&gt;.&#39;</code></td></tr><tr><td><code>publish/not-declared</code></td><td><code>&#39;&lt;entity&gt;&#39; at version &lt;n&gt; is not declared on the live deployment — vmnodes.json&#39;s &quot;publishes&quot; must list &quot;&lt;local&gt;/v&lt;n&gt;&quot;.</code></td></tr><tr><td><code>publish/not-declared</code></td><td><code>&#39;&lt;entity&gt;&#39; at version &lt;n&gt; cannot be registered: no live deployment. vmnodes.json&#39;s &quot;publishes&quot; must list &quot;&lt;local&gt;/v&lt;n&gt;&quot; once this application has one.</code></td></tr><tr><td><code>publish/not-declared</code></td><td><code>&#39;&lt;entity&gt;&#39; at version &lt;n&gt; cannot be registered: the live deployment&#39;s image recorded no publishes list (built before vmnodes.json publishes was read), so there is nothing to check against. Rebuild to declare one, listing &quot;&lt;local&gt;/v&lt;n&gt;&quot; in vmnodes.json&#39;s &quot;publishes&quot;.</code></td></tr></tbody></table></div>
+<p><strong>Do not register while the app is starting.</strong> The check reads the live version&#39;s list, and your new version is not live until it answers its health check. Registering at boot fails with <code>publish/not-declared</code> and &quot;no live deployment&quot; on a launch, and on an update checks the old version&#39;s list. Register on the first publish instead, and try again on failure, as the starter&#39;s <code>publish.js</code> does.</p>
+<h2 id="publish-records">Publish records<a class="d-anchor" href="#publish-records" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/publish/records</code></p>
+<div class="d-table"><table><thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>entity</code></td><td>string</td><td>yes</td><td>The registered entity.</td></tr><tr><td><code>records</code></td><td>array</td><td>yes</td><td>Up to 1000 per call.</td></tr><tr><td><code>records[].recordKey</code></td><td>string</td><td>yes</td><td>Your id for the record. The same key replaces the record.</td></tr><tr><td><code>records[].payload</code></td><td>object</td><td>yes</td><td>The values, keyed by field name.</td></tr><tr><td><code>records[].sourceUpdatedAt</code></td><td>string</td><td>no</td><td>When the record last changed, an ISO 8601 timestamp.</td></tr><tr><td><code>mode</code></td><td><code>upsert</code> or <code>snapshot</code></td><td>no</td><td><code>upsert</code> by default.</td></tr></tbody></table></div>
+<ul><li><strong><code>upsert</code></strong> adds new records and replaces records with the same <code>recordKey</code>. Nothing is deleted.</li><li><strong><code>snapshot</code></strong> upserts what you send and marks every record you did not send as deleted. Send the whole list every time. Use it when the app keeps its records in a database, so a record deleted there disappears from the share too.</li></ul>
+<p>A successful call answers 200: <code>{&quot;upserted&quot;: 3, &quot;tombstoned&quot;: 0}</code>. <code>tombstoned</code> counts records marked deleted.</p>
+<h3 id="publish-errors">Publish errors<a class="d-anchor" href="#publish-errors" aria-label="Link to this section">#</a></h3>
+<div class="d-table"><table><thead><tr><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td><code>publish/unknown-entity</code></td><td><code>register &#39;&lt;entity&gt;&#39; before publishing to it</code></td></tr><tr><td><code>publish/retired</code></td><td><code>This app no longer shares &#39;&lt;entity&gt;&#39;. Nothing new is accepted for it.</code></td></tr><tr><td><code>publish/entity-owned-elsewhere</code></td><td><code>&#39;&lt;entity&gt;&#39; belongs to a different source</code></td></tr><tr><td><code>publish/too-many-records</code></td><td><code>publish at most 1000 records per call</code></td></tr></tbody></table></div>
+<p>An entity is retired when its entry leaves <code>publishes</code>. Add it back, update the app, and register it again.</p>
+<h2 id="example">Example<a class="d-anchor" href="#example" aria-label="Link to this section">#</a></h2>
+<p>This is what the starter does for a <code>note/v1</code> entity in an app launched as <code>noticeboard</code>, with <code>VMNODES_APP_NAME</code> set to <code>noticeboard</code>:</p>
+<pre data-lang="js"><code>const base = process.env.VMNODES_API_URL;
+const headers = {
+  authorization: `Bearer ${process.env.VMNODES_PUBLISH_TOKEN}`,
+  &quot;content-type&quot;: &quot;application/json&quot;,
+};
+const entity = `${process.env.VMNODES_APP_NAME}.note`;
+
+async function call(path, body) {
+  const res = await fetch(base + path, { method: &quot;POST&quot;, headers, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${path} ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+await call(&quot;/v1/publish/entities&quot;, {
+  entity,
+  description: &quot;Notes posted on the team noticeboard.&quot;,
+  classification: &quot;internal&quot;,
+  queryableFields: [
+    { name: &quot;text&quot;, type: &quot;string&quot; },
+    { name: &quot;author&quot;, type: &quot;string&quot; },
+    { name: &quot;postedAt&quot;, type: &quot;timestamp&quot; },
+  ],
+});
+
+await call(&quot;/v1/publish/records&quot;, {
+  entity,
+  mode: &quot;snapshot&quot;,
+  records: notes.map((n) =&gt; ({
+    recordKey: n.id,
+    payload: { text: n.text, author: n.authorName, postedAt: n.postedAt },
+    sourceUpdatedAt: n.postedAt,
+  })),
+});</code></pre>
+<p>The call answers <code>{&quot;upserted&quot;:N,&quot;tombstoned&quot;:0}</code> when it worked.</p>
+<h2 id="reading-shared-records">Reading shared records<a class="d-anchor" href="#reading-shared-records" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/data/query</code> reads records that another app, or your own, has shared and been granted access to.</p>
+<p>An app can read only what it has been given access to. Today, giving an app access to a shared entity is done by your VMnodes contact. Ask them for access to the entity by name, such as <code>crm.note</code>, and for a token for your app.</p>
+<p><strong>An app that publishes nothing has no token.</strong> The platform creates a token for an app only when its <code>vmnodes.json</code> lists at least one entry under <code>publishes</code>. A portal app with no <code>publishes</code> entry has no credential to send to <code>POST /v1/data/query</code>, which answers 401 <code>auth/unauthorised</code> with <code>a valid API token is required</code>. If your app only reads shared records, ask your VMnodes contact for a token and for the access, rather than adding a <code>publishes</code> entry to get one.</p>
+<blockquote><p><strong>Coming:</strong> reading another app&#39;s shared data from a portal app, without asking your VMnodes contact. Today it needs them.</p></blockquote>
+<h3 id="query-request">Query request<a class="d-anchor" href="#query-request" aria-label="Link to this section">#</a></h3>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;crm.note&quot;,
+  &quot;select&quot;: [&quot;text&quot;, &quot;author&quot;, &quot;postedAt&quot;],
+  &quot;filter&quot;: [{ &quot;field&quot;: &quot;author&quot;, &quot;op&quot;: &quot;eq&quot;, &quot;value&quot;: &quot;Eden&quot; }],
+  &quot;orderBy&quot;: { &quot;field&quot;: &quot;postedAt&quot;, &quot;dir&quot;: &quot;desc&quot; },
+  &quot;limit&quot;: 20
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Field</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>entity</code></td><td>Required. The entity name.</td></tr><tr><td><code>select</code></td><td>Required. At least one field name.</td></tr><tr><td><code>filter</code></td><td>Optional list of <code>{field, op, value}</code>. <code>op</code> is <code>eq</code>, <code>ne</code>, <code>in</code> (1 to 100 values), <code>gt</code>, <code>gte</code>, <code>lt</code>, <code>lte</code> or <code>contains</code>.</td></tr><tr><td><code>orderBy</code></td><td>Optional <code>{field, dir}</code>. <code>dir</code> is <code>asc</code> or <code>desc</code>.</td></tr><tr><td><code>limit</code></td><td>Optional positive whole number. Default 50, at most 200.</td></tr><tr><td><code>aggregate</code></td><td>Optional <code>{fn, field?, groupBy?, buckets?}</code>. <code>fn</code> is <code>count</code>, <code>sum</code>, <code>min</code> or <code>max</code>. <code>buckets</code> is `{field: &quot;day&quot;</td><td>&quot;month&quot;</td><td>&quot;year&quot;}`. A grouped result is capped at 200 groups.</td></tr></tbody></table></div>
+<p>The response:</p>
+<pre data-lang="json"><code>{
+  &quot;rows&quot;: [ { &quot;text&quot;: &quot;Lunch is on&quot;, &quot;author&quot;: &quot;Eden&quot;, &quot;postedAt&quot;: &quot;2026-10-22T01:00:00.000Z&quot; } ],
+  &quot;provenance&quot;: { &quot;entity&quot;: &quot;crm.note&quot;, &quot;source&quot;: &quot;crm&quot;, &quot;freshestAt&quot;: &quot;…&quot;, &quot;stalestAt&quot;: &quot;…&quot; },
+  &quot;truncated&quot;: false,
+  &quot;rowCount&quot;: 1
+}</code></pre>
+<p><code>truncated</code> is <code>true</code> when more rows matched than were returned. <code>truncation</code> says why: <code>none</code>, <code>groups</code> or <code>scan</code>. <code>withheld</code> lists fields the caller may not see, when there are any. <code>provenance</code> says which app the rows came from and how old they are.</p>
+<p>To see what exists and what fields you may read, call <code>GET /v1/data/entities</code>, and <code>GET /v1/data/entities/&lt;entity&gt;</code> for one.</p>
+<p>An app on its own sees what the app has been granted. To see only what a person is also allowed to see, send the identity header&#39;s value as <code>X-Vmnodes-On-Behalf-Of: &lt;the X-Vmnodes-Identity value&gt;</code>; the result is limited to what both the app and the person may read. Only an app&#39;s token may send it.</p>
+<h3 id="query-errors">Query errors<a class="d-anchor" href="#query-errors" aria-label="Link to this section">#</a></h3>
+<div class="d-table"><table><thead><tr><th scope="col">Message</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>no query access to &#39;&lt;entity&gt;&#39;</code></td><td>The same text for an entity that does not exist, one you have no access to, and one with no field shared with you.</td></tr><tr><td><code>no aggregate access to &#39;&lt;entity&gt;&#39;</code></td><td>The same, for an aggregate.</td></tr><tr><td><code>field &#39;&lt;field&gt;&#39; is not available to you on &#39;&lt;entity&gt;&#39;</code></td><td>The field is not shared with you.</td></tr><tr><td><code>rows of &#39;&lt;entity&gt;&#39; are identified by &lt;grain&gt;, and &lt;hidden&gt; &lt;is|are&gt; not available to you — two rows could differ in a way you cannot see. Aggregate instead (count, sum, min, max), which needs no row identity.</code></td><td>You cannot see every field that identifies a row.</td></tr><tr><td><code>unknown operator &#39;&lt;op&gt;&#39;</code></td><td>Use one of the operators above.</td></tr><tr><td><code>select at least one field</code></td><td><code>select</code> is empty.</td></tr><tr><td><code>select is required — select at least one field</code></td><td><code>select</code> is missing.</td></tr><tr><td><code>entity is required and must be a string</code></td><td></td></tr><tr><td><code>select must be an array of field names</code></td><td></td></tr><tr><td><code>limit must be a positive integer</code></td><td></td></tr></tbody></table></div>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/sharing">Sharing data with other apps</a></li><li><a href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a href="/reference/environment">Environment variables</a></li><li><a href="/reference/limits">Limits and what is not possible yet</a></li></ul>
+  <p class="d-meta"><a href="/reference/publish-api.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#before-you-call">Before you call</a></li><li class="l3"><a href="#errors-in-every-response">Errors in every response</a></li><li class="l2"><a href="#register-an-entity">Register an entity</a></li><li class="l3"><a href="#fields-start-off-not-shared">Fields start off not shared</a></li><li class="l3"><a href="#register-errors">Register errors</a></li><li class="l2"><a href="#publish-records">Publish records</a></li><li class="l3"><a href="#publish-errors">Publish errors</a></li><li class="l2"><a href="#example">Example</a></li><li class="l2"><a href="#reading-shared-records">Reading shared records</a></li><li class="l3"><a href="#query-request">Query request</a></li><li class="l3"><a href="#query-errors">Query errors</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

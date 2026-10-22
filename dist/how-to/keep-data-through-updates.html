@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keep data through updates · VMnodes docs</title>
+<meta name="description" content="Make an app keep its data when you update it, and change its tables later without losing a row. Read this before the first update of any app that stores anything, and again before the first change to its tables. The example is a stationery stock list for the org acme, which gains a &quot;reorder level&quot; column in its second version.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/keep-data-through-updates.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates" aria-current="page">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="keep-data-through-updates">Keep data through updates</h1>
+<p>Make an app keep its data when you update it, and change its tables later without losing a row. Read this before the first update of any app that stores anything, and again before the first change to its tables. The example is a stationery stock list for the org <code>acme</code>, which gains a &quot;reorder level&quot; column in its second version.</p>
+<p>An update replaces the app&#39;s container, so anything the app kept in memory or wrote to its own disk is gone afterwards. Only the app&#39;s database survives, and only when <code>vmnodes.json</code> asks for one. See <a href="/concepts/data">Data</a>.</p>
+<p>You start from the starter, so do <a href="/getting-started">Getting started</a> steps 1 to 3 first. This page assumes the files explained in <a href="/how-to/form-and-list">Build a form-and-list app</a>.</p>
+<h2 id="1-remove-what-this-app-does-not-use">1. Remove what this app does not use<a class="d-anchor" href="#1-remove-what-this-app-does-not-use" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>rm publish.js manifest.json test/smoke.js
+ls</code></pre>
+<p>It worked when <code>ls</code> lists <code>Dockerfile</code>, <code>package.json</code>, <code>server.js</code>, <code>store.js</code> and <code>vmnodes.json</code>, and does not list <code>publish.js</code> or <code>manifest.json</code>.</p>
+<h2 id="2-ask-for-a-database">2. Ask for a database<a class="d-anchor" href="#2-ask-for-a-database" aria-label="Link to this section">#</a></h2>
+<p>Replace <code>vmnodes.json</code>. Without <code>&quot;database&quot;: true</code>, the first update clears everything the app holds.</p>
+<pre data-lang="json"><code>{
+  &quot;apiVersion&quot;: &quot;vmnodes.com/v1&quot;,
+  &quot;roles&quot;: [
+    {
+      &quot;name&quot;: &quot;stationery.keeper&quot;,
+      &quot;description&quot;: &quot;Can add items to the stationery stock list and see what is in stock.&quot;
+    }
+  ],
+  &quot;database&quot;: true
+}</code></pre>
+<p>It worked when this prints <code>true</code>:</p>
+<pre data-lang="bash"><code>node -e &#39;console.log(require(&quot;./vmnodes.json&quot;).database)&#39;</code></pre>
+<h2 id="3-write-the-databases-shape-as-a-list-that-runs-at-every-start">3. Write the database&#39;s shape as a list that runs at every start<a class="d-anchor" href="#3-write-the-databases-shape-as-a-list-that-runs-at-every-start" aria-label="Link to this section">#</a></h2>
+<p>Replace <code>store.js</code>. The tables are not created by VMnodes: the app creates them when it starts, from the <code>MIGRATIONS</code> list. The three rules in the comment above the list are what let you change the tables later without losing data, and the rest of this page depends on them.</p>
+<pre data-lang="js"><code>// store.js: where the stock list is kept.
+//
+//   DATABASE_URL set   items are kept in Postgres, across restarts and updates.
+//   not set            items are kept in memory and cleared on every restart.
+//
+// On the platform, DATABASE_URL is set for you when vmnodes.json says
+// &quot;database&quot;: true. There is no fallback: if DATABASE_URL is set but the database
+// cannot be reached, the app refuses to start rather than quietly keeping items in memory.
+
+// The database&#39;s shape, as an ordered list. Rules for this list:
+//   - Add to the END. Never edit or delete an entry that has shipped.
+//   - Every entry must be safe to run again: it runs at EVERY start-up, on a database
+//     that may already have it.
+//   - Only add things (tables, columns with a default, indexes). Never drop or rename.
+const MIGRATIONS = [
+  `create table if not exists items (
+     seq bigserial primary key,
+     id uuid not null unique,
+     name text not null,
+     quantity integer not null check (quantity &gt;= 0),
+     added_at timestamptz not null
+   )`,
+];
+
+function memoryStore() {
+  const items = [];
+  return {
+    kind: &quot;memory&quot;,
+    async init() {},
+    async list() { return items.map((i) =&gt; ({ ...i })); },
+    async add(item) { items.unshift({ ...item }); },
+    async close() {},
+  };
+}
+
+function postgresStore(url, { attempts = 5, delayMs = 1000, log = console } = {}) {
+  const postgres = require(&quot;postgres&quot;);
+  const sql = postgres(url, { max: 3, onnotice: () =&gt; {} });
+  const toItem = (r) =&gt; ({ id: r.id, name: r.name, quantity: r.quantity, addedAt: r.added_at.toISOString() });
+  return {
+    kind: &quot;postgres&quot;,
+    async init() {
+      // First, wait until the database answers. Only a database that cannot be reached is retried.
+      for (let i = 1; ; i++) {
+        try {
+          await sql`select 1`;
+          break;
+        } catch (err) {
+          if (i &gt;= attempts) throw new Error(`could not reach the database after ${attempts} tries: ${err.message}`);
+          log.log(`database not reachable yet (try ${i} of ${attempts}): ${err.message}`);
+          await new Promise((r) =&gt; setTimeout(r, delayMs));
+        }
+      }
+      // Then bring the database&#39;s shape up to date. This is NOT retried: if a change fails, the app
+      // stops and says why, instead of reporting a broken change as an unreachable database.
+      // One transaction, under a lock, so two containers starting together cannot run the list at once.
+      await sql.begin(async (tx) =&gt; {
+        await tx`select pg_advisory_xact_lock(727001)`;
+        for (const statement of MIGRATIONS) await tx.unsafe(statement);
+      });
+    },
+    async list() {
+      const rows = await sql`select id, name, quantity, added_at from items order by seq desc`;
+      return rows.map(toItem);
+    },
+    async add(item) {
+      await sql`insert into items (id, name, quantity, added_at) values (${item.id}, ${item.name}, ${item.quantity}, ${item.addedAt})`;
+    },
+    async close() { await sql.end({ timeout: 5 }); },
+  };
+}
+
+function openStore({ env = process.env, log = console } = {}) {
+  return env.DATABASE_URL ? postgresStore(env.DATABASE_URL, { log }) : memoryStore();
+}
+
+module.exports = { openStore };</code></pre>
+<h2 id="4-replace-serverjs">4. Replace <code>server.js</code><a class="d-anchor" href="#4-replace-serverjs" aria-label="Link to this section">#</a></h2>
+<pre data-lang="js"><code>// server.js: the whole app. A stationery stock list: people with the &quot;keeper&quot; role add
+// items and see what is in stock.
+const http = require(&quot;node:http&quot;);
+const crypto = require(&quot;node:crypto&quot;);
+const { VmnodesIdentity, IdentityError } = require(&quot;@vmnodes/identity&quot;);
+const { openStore } = require(&quot;./store&quot;);
+
+const APP_NAME = process.env.VMNODES_APP_NAME || &quot;stationery-stock&quot;;
+// Must match the role name in vmnodes.json exactly.
+const KEEPER_ROLE = &quot;stationery.keeper&quot;;
+const VERSION = require(&quot;./package.json&quot;).version;
+const BUILD_COMMIT = process.env.BUILD_COMMIT || null;
+const PORT = Number(process.env.PORT || 3000);
+const LISTEN_ADDRESS = process.env.LISTEN_ADDRESS || undefined;
+
+let identity;
+try {
+  identity = new VmnodesIdentity();
+} catch (err) {
+  console.error(`${err.message}\nThe platform sets these when your app is deployed; locally, \`npm run dev\` sets them for you.`);
+  process.exit(1);
+}
+const store = openStore();
+
+const KEPT = {
+  postgres: &quot;Items are kept in this app&#39;s database, across restarts and updates.&quot;,
+  memory: &quot;Items are kept in memory, so they are cleared when the app restarts or is updated.&quot;,
+};
+const esc = (s) =&gt; String(s).replace(/[&amp;&lt;&gt;&quot;&#39;]/g, (c) =&gt; ({ &quot;&amp;&quot;: &quot;&amp;amp;&quot;, &quot;&lt;&quot;: &quot;&amp;lt;&quot;, &quot;&gt;&quot;: &quot;&amp;gt;&quot;, &#39;&quot;&#39;: &quot;&amp;quot;&quot;, &quot;&#39;&quot;: &quot;&amp;#39;&quot; }[c]));
+
+function send(res, status, body, type = &quot;application/json&quot;) {
+  res.writeHead(status, { &quot;content-type&quot;: type });
+  res.end(type === &quot;application/json&quot; ? JSON.stringify(body) : body);
+}
+
+function readBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) =&gt; {
+    let size = 0; const chunks = [];
+    req.on(&quot;data&quot;, (c) =&gt; { size += c.length; if (size &gt; limit) { reject(new IdentityError(&quot;body too large&quot;, 413)); req.destroy(); } else chunks.push(c); });
+    req.on(&quot;end&quot;, () =&gt; resolve(Buffer.concat(chunks).toString(&quot;utf8&quot;)));
+    req.on(&quot;error&quot;, reject);
+  });
+}
+
+async function readFields(req, names) {
+  const raw = await readBody(req);
+  const json = (req.headers[&quot;content-type&quot;] || &quot;&quot;).includes(&quot;application/json&quot;);
+  const o = json ? JSON.parse(raw || &quot;{}&quot;) : Object.fromEntries(new URLSearchParams(raw));
+  return Object.fromEntries(names.map((n) =&gt; [n, typeof o[n] === &quot;string&quot; || typeof o[n] === &quot;number&quot; ? String(o[n]).trim() : &quot;&quot;]));
+}
+
+// Whole numbers only, 0 to 100000. Returns the number, or null.
+const wholeNumber = (text) =&gt; (/^\d{1,6}$/.test(text) &amp;&amp; Number(text) &lt;= 100000 ? Number(text) : null);
+
+function shell(inner) {
+  return `&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;&lt;title&gt;Stationery stock&lt;/title&gt;
+&lt;style&gt;body{font:16px/1.5 system-ui,sans-serif;background:#0b0c10;color:#e8e8ee;max-width:760px;margin:0 auto;padding:16px}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid #2a2c35;padding:8px 6px}small,th{color:#9a9cab;font-weight:normal}label{display:block;margin-top:8px}input{width:100%;background:#15161c;color:inherit;border:1px solid #2a2c35;border-radius:6px;padding:8px;box-sizing:border-box;font:inherit}button{margin-top:8px;background:#5b5bd6;color:#fff;border:0;border-radius:6px;padding:10px 16px;font:inherit}.err{border:1px solid #d65b5b;border-radius:6px;padding:8px}code{font-family:ui-monospace,monospace}&lt;/style&gt;&lt;/head&gt;&lt;body&gt;${inner}&lt;/body&gt;&lt;/html&gt;`;
+}
+
+function page(user, items, { error = &quot;&quot;, values = {} } = {}) {
+  const rows = items.length
+    ? items.map((i) =&gt; `&lt;tr&gt;&lt;td&gt;${esc(i.name)}&lt;/td&gt;&lt;td&gt;${esc(i.quantity)}&lt;/td&gt;&lt;/tr&gt;`).join(&quot;&quot;)
+    : `&lt;tr&gt;&lt;td colspan=&quot;2&quot;&gt;Nothing on the list yet.&lt;/td&gt;&lt;/tr&gt;`;
+  return shell(`&lt;h1&gt;Stationery stock&lt;/h1&gt;&lt;p id=&quot;who&quot;&gt;Signed in as &lt;strong&gt;${esc(user.name || user.email)}&lt;/strong&gt;&lt;/p&gt;
+&lt;form method=&quot;post&quot; action=&quot;/items&quot;&gt;${error ? `&lt;p class=&quot;err&quot; role=&quot;alert&quot;&gt;${esc(error)}&lt;/p&gt;` : &quot;&quot;}
+&lt;label for=&quot;name&quot;&gt;Item&lt;/label&gt;&lt;input id=&quot;name&quot; name=&quot;name&quot; required maxlength=&quot;100&quot; value=&quot;${esc(values.name || &quot;&quot;)}&quot;&gt;
+&lt;label for=&quot;quantity&quot;&gt;How many in stock&lt;/label&gt;&lt;input id=&quot;quantity&quot; name=&quot;quantity&quot; required inputmode=&quot;numeric&quot; value=&quot;${esc(values.quantity || &quot;&quot;)}&quot;&gt;
+&lt;button type=&quot;submit&quot;&gt;Add item&lt;/button&gt;&lt;/form&gt;
+&lt;h2&gt;In stock&lt;/h2&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Item&lt;/th&gt;&lt;th&gt;Quantity&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;items&quot;&gt;${rows}&lt;/tbody&gt;&lt;/table&gt;
+&lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])}&lt;/small&gt;&lt;/p&gt;`);
+}
+
+async function handle(req, res) {
+  const url = new URL(req.url, &quot;http://app&quot;);
+  const isApi = url.pathname.startsWith(&quot;/api/&quot;);
+
+  if (url.pathname === &quot;/health&quot;) {
+    return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
+  }
+
+  const user = await identity.currentUser(req.headers);
+  identity.requireRole(user, KEEPER_ROLE); // every route below is for keepers, checked on the SERVER
+
+  if (url.pathname === &quot;/&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, page(user, await store.list()), &quot;text/html; charset=utf-8&quot;);
+  if (url.pathname === &quot;/api/items&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: await store.list() });
+
+  if ((url.pathname === &quot;/items&quot; || url.pathname === &quot;/api/items&quot;) &amp;&amp; req.method === &quot;POST&quot;) {
+    const f = await readFields(req, [&quot;name&quot;, &quot;quantity&quot;]);
+    const quantity = wholeNumber(f.quantity);
+    const problem = !f.name ? &quot;name is required&quot; : f.name.length &gt; 100 ? &quot;name must be at most 100 characters&quot;
+      : quantity === null ? &quot;quantity must be a whole number from 0 to 100000&quot; : null;
+    if (problem) {
+      if (isApi) return send(res, 400, { error: problem });
+      return send(res, 400, page(user, await store.list(), { error: problem, values: f }), &quot;text/html; charset=utf-8&quot;);
+    }
+    const item = { id: crypto.randomUUID(), name: f.name, quantity, addedAt: new Date().toISOString() };
+    await store.add(item);
+    if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+    return send(res, 201, item);
+  }
+
+  return send(res, 404, { error: &quot;not found&quot; });
+}
+
+const server = http.createServer((req, res) =&gt; {
+  handle(req, res).catch((err) =&gt; {
+    const status = err instanceof IdentityError ? err.status : err instanceof SyntaxError ? 400 : 500;
+    if (status &gt;= 500) console.error(err.cause || err);
+    const message = status === 500 ? &quot;something went wrong&quot; : err.message;
+    if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
+    send(res, status, shell(`&lt;h1&gt;Stationery stock&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(KEEPER_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;` : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+  });
+});
+store.init().then(
+  () =&gt; server.listen({ port: PORT, host: LISTEN_ADDRESS }, () =&gt; console.log(`${APP_NAME} ${VERSION} listening on :${server.address().port} (items kept in ${store.kind})`)),
+  (err) =&gt; {
+    console.error(`${err.message}\nDATABASE_URL is set, so this app will not start without its database.`);
+    process.exit(1);
+  },
+);</code></pre>
+<p>It worked when both files parse. This prints nothing and exits 0:</p>
+<pre data-lang="bash"><code>node --check server.js &amp;&amp; node --check store.js</code></pre>
+<h2 id="5-match-the-files-to-the-new-role-the-file-list-and-the-test-script">5. Match the files to the new role, the file list and the test script<a class="d-anchor" href="#5-match-the-files-to-the-new-role-the-file-list-and-the-test-script" aria-label="Link to this section">#</a></h2>
+<p>The pretend portal signs you in with the starter&#39;s role. Give it yours:</p>
+<pre data-lang="diff"><code>--- a/dev/mock-portal.js
++++ b/dev/mock-portal.js
+@@ -18,7 +18,7 @@
+ // the role strings must be exactly what your server passes to requireRole.
+ const USERS = {
+   reader: { sub: &quot;usr_local_reader&quot;, email: &quot;reader@example.test&quot;, name: &quot;Riley Reader&quot;, kind: &quot;employee&quot;, groups: [], roles: [] },
+-  editor: { sub: &quot;usr_local_editor&quot;, email: &quot;editor@example.test&quot;, name: &quot;Eden Editor&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;starter.editor&quot;] },
++  editor: { sub: &quot;usr_local_editor&quot;, email: &quot;editor@example.test&quot;, name: &quot;Eden Editor&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;stationery.keeper&quot;] },
+ };
+ 
+ async function startMockPortal({ port, appUrl, appId, as = &quot;editor&quot; }) {</code></pre>
+<p>The <code>Dockerfile</code> no longer copies <code>publish.js</code>:</p>
+<pre data-lang="diff"><code>--- a/Dockerfile
++++ b/Dockerfile
+@@ -32,7 +32,7 @@
+ ENV BUILD_COMMIT=$BUILD_COMMIT
+ 
+ # Copy the app itself. Only what runs goes in: no tests, no dev tools.
+-COPY server.js publish.js store.js ./
++COPY server.js store.js ./
+ 
+ # A portal launch (no manifest.json) deploys to port 3000, fixed. If you use the
+ # Advanced path instead, this must match runtime.port in manifest.json.</code></pre>
+<p>The starter&#39;s test checks the noticeboard, which is gone. For now <code>npm test</code> is a syntax check:</p>
+<pre data-lang="diff"><code>--- a/package.json
++++ b/package.json
+@@ -7,7 +7,7 @@
+   &quot;scripts&quot;: {
+     &quot;start&quot;: &quot;node server.js&quot;,
+     &quot;dev&quot;: &quot;node dev/run-local.js&quot;,
+-    &quot;test&quot;: &quot;node test/smoke.js&quot;
++    &quot;test&quot;: &quot;node --check server.js &amp;&amp; node --check store.js&quot;
+   },
+   &quot;engines&quot;: {
+     &quot;node&quot;: &quot;&gt;=22&quot;</code></pre>
+<pre data-lang="bash"><code>npm test</code></pre>
+<p>It worked when the command prints no error and exits 0.</p>
+<h2 id="6-prove-the-data-survives-a-restart-on-your-computer">6. Prove the data survives a restart on your computer<a class="d-anchor" href="#6-prove-the-data-survives-a-restart-on-your-computer" aria-label="Link to this section">#</a></h2>
+<p><code>npm run dev</code> keeps items in memory, because it sets no <code>DATABASE_URL</code>. Point it at a Postgres database of your own to test the real path. Use an empty scratch database.</p>
+<pre data-lang="bash"><code>createdb stationery_scratch
+DATABASE_URL=postgres://localhost/stationery_scratch npm run dev</code></pre>
+<p>Open <code>http://127.0.0.1:4100</code>. It worked when the page is headed <strong>Stationery stock</strong> and its last line reads &quot;Items are kept in this app&#39;s database, across restarts and updates.&quot; Add an item, press Ctrl+C, run the command again and reload. The item is still in the table.</p>
+<h2 id="7-launch-it-and-put-some-rows-in">7. Launch it and put some rows in<a class="d-anchor" href="#7-launch-it-and-put-some-rows-in" aria-label="Link to this section">#</a></h2>
+<p>Commit, push and launch as <code>stationery-stock</code>, following <a href="/getting-started">Getting started</a> steps 3 to 6. Add two or three items in the app.</p>
+<p>It worked when the badge reads <strong>Working</strong> and the app&#39;s last line reads &quot;Items are kept in this app&#39;s database, across restarts and updates.&quot;</p>
+<h2 id="8-change-the-database-add-a-column">8. Change the database: add a column<a class="d-anchor" href="#8-change-the-database-add-a-column" aria-label="Link to this section">#</a></h2>
+<p>The customer now wants a reorder level on each item. Add the change to the end of the list; never edit the entry above it.</p>
+<pre data-lang="diff"><code>--- a/store.js
++++ b/store.js
+@@ -20,6 +20,9 @@
+      quantity integer not null check (quantity &gt;= 0),
+      added_at timestamptz not null
+    )`,
++  // Version 2: a reorder level. Old rows get 0 (&quot;no level set&quot;); version 1 of the app, which
++  // never mentions this column, keeps working against it, so a rollback is safe.
++  `alter table items add column if not exists reorder_level integer not null default 0`,
+ ];
+ 
+ function memoryStore() {
+@@ -36,7 +39,7 @@
+ function postgresStore(url, { attempts = 5, delayMs = 1000, log = console } = {}) {
+   const postgres = require(&quot;postgres&quot;);
+   const sql = postgres(url, { max: 3, onnotice: () =&gt; {} });
+-  const toItem = (r) =&gt; ({ id: r.id, name: r.name, quantity: r.quantity, addedAt: r.added_at.toISOString() });
++  const toItem = (r) =&gt; ({ id: r.id, name: r.name, quantity: r.quantity, reorderLevel: r.reorder_level, addedAt: r.added_at.toISOString() });
+   return {
+     kind: &quot;postgres&quot;,
+     async init() {
+@@ -60,11 +63,12 @@
+       });
+     },
+     async list() {
+-      const rows = await sql`select id, name, quantity, added_at from items order by seq desc`;
++      const rows = await sql`select id, name, quantity, reorder_level, added_at from items order by seq desc`;
+       return rows.map(toItem);
+     },
+     async add(item) {
+-      await sql`insert into items (id, name, quantity, added_at) values (${item.id}, ${item.name}, ${item.quantity}, ${item.addedAt})`;
++      await sql`insert into items (id, name, quantity, reorder_level, added_at)
++                values (${item.id}, ${item.name}, ${item.quantity}, ${item.reorderLevel}, ${item.addedAt})`;
+     },
+     async close() { await sql.end({ timeout: 5 }); },
+   };</code></pre>
+<p>The server takes the new field and marks an item as low when its quantity falls to its level:</p>
+<pre data-lang="diff"><code>--- a/server.js
++++ b/server.js
+@@ -59,14 +59,15 @@
+ 
+ function page(user, items, { error = &quot;&quot;, values = {} } = {}) {
+   const rows = items.length
+-    ? items.map((i) =&gt; `&lt;tr&gt;&lt;td&gt;${esc(i.name)}&lt;/td&gt;&lt;td&gt;${esc(i.quantity)}&lt;/td&gt;&lt;/tr&gt;`).join(&quot;&quot;)
+-    : `&lt;tr&gt;&lt;td colspan=&quot;2&quot;&gt;Nothing on the list yet.&lt;/td&gt;&lt;/tr&gt;`;
++    ? items.map((i) =&gt; `&lt;tr&gt;&lt;td&gt;${esc(i.name)}&lt;/td&gt;&lt;td&gt;${esc(i.quantity)}${i.reorderLevel &gt; 0 &amp;&amp; i.quantity &lt;= i.reorderLevel ? &quot; &lt;strong&gt;Low stock&lt;/strong&gt;&quot; : &quot;&quot;}&lt;/td&gt;&lt;td&gt;${i.reorderLevel &gt; 0 ? esc(i.reorderLevel) : &quot;&quot;}&lt;/td&gt;&lt;/tr&gt;`).join(&quot;&quot;)
++    : `&lt;tr&gt;&lt;td colspan=&quot;3&quot;&gt;Nothing on the list yet.&lt;/td&gt;&lt;/tr&gt;`;
+   return shell(`&lt;h1&gt;Stationery stock&lt;/h1&gt;&lt;p id=&quot;who&quot;&gt;Signed in as &lt;strong&gt;${esc(user.name || user.email)}&lt;/strong&gt;&lt;/p&gt;
+ &lt;form method=&quot;post&quot; action=&quot;/items&quot;&gt;${error ? `&lt;p class=&quot;err&quot; role=&quot;alert&quot;&gt;${esc(error)}&lt;/p&gt;` : &quot;&quot;}
+ &lt;label for=&quot;name&quot;&gt;Item&lt;/label&gt;&lt;input id=&quot;name&quot; name=&quot;name&quot; required maxlength=&quot;100&quot; value=&quot;${esc(values.name || &quot;&quot;)}&quot;&gt;
+ &lt;label for=&quot;quantity&quot;&gt;How many in stock&lt;/label&gt;&lt;input id=&quot;quantity&quot; name=&quot;quantity&quot; required inputmode=&quot;numeric&quot; value=&quot;${esc(values.quantity || &quot;&quot;)}&quot;&gt;
++&lt;label for=&quot;reorderLevel&quot;&gt;Reorder when it falls to (optional)&lt;/label&gt;&lt;input id=&quot;reorderLevel&quot; name=&quot;reorderLevel&quot; inputmode=&quot;numeric&quot; value=&quot;${esc(values.reorderLevel || &quot;&quot;)}&quot;&gt;
+ &lt;button type=&quot;submit&quot;&gt;Add item&lt;/button&gt;&lt;/form&gt;
+-&lt;h2&gt;In stock&lt;/h2&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Item&lt;/th&gt;&lt;th&gt;Quantity&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;items&quot;&gt;${rows}&lt;/tbody&gt;&lt;/table&gt;
++&lt;h2&gt;In stock&lt;/h2&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Item&lt;/th&gt;&lt;th&gt;Quantity&lt;/th&gt;&lt;th&gt;Reorder at&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;items&quot;&gt;${rows}&lt;/tbody&gt;&lt;/table&gt;
+ &lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])}&lt;/small&gt;&lt;/p&gt;`);
+ }
+ 
+@@ -85,15 +86,17 @@
+   if (url.pathname === &quot;/api/items&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: await store.list() });
+ 
+   if ((url.pathname === &quot;/items&quot; || url.pathname === &quot;/api/items&quot;) &amp;&amp; req.method === &quot;POST&quot;) {
+-    const f = await readFields(req, [&quot;name&quot;, &quot;quantity&quot;]);
++    const f = await readFields(req, [&quot;name&quot;, &quot;quantity&quot;, &quot;reorderLevel&quot;]);
+     const quantity = wholeNumber(f.quantity);
++    const reorderLevel = f.reorderLevel === &quot;&quot; ? 0 : wholeNumber(f.reorderLevel);
+     const problem = !f.name ? &quot;name is required&quot; : f.name.length &gt; 100 ? &quot;name must be at most 100 characters&quot;
+-      : quantity === null ? &quot;quantity must be a whole number from 0 to 100000&quot; : null;
++      : quantity === null ? &quot;quantity must be a whole number from 0 to 100000&quot;
++      : reorderLevel === null ? &quot;reorderLevel must be a whole number from 0 to 100000&quot; : null;
+     if (problem) {
+       if (isApi) return send(res, 400, { error: problem });
+       return send(res, 400, page(user, await store.list(), { error: problem, values: f }), &quot;text/html; charset=utf-8&quot;);
+     }
+-    const item = { id: crypto.randomUUID(), name: f.name, quantity, addedAt: new Date().toISOString() };
++    const item = { id: crypto.randomUUID(), name: f.name, quantity, reorderLevel, addedAt: new Date().toISOString() };
+     await store.add(item);
+     if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+     return send(res, 201, item);</code></pre>
+<p>Raise the version, so <code>/health</code> shows which one is running. This changes <code>package.json</code> and <code>package-lock.json</code> together and prints <code>v0.2.0</code>:</p>
+<pre data-lang="bash"><code>npm version 0.2.0 --no-git-tag-version</code></pre>
+<p>Then point the test script at the new file:</p>
+<pre data-lang="diff"><code>--- a/package.json
++++ b/package.json
+@@ -1,13 +1,13 @@
+ {
+   &quot;name&quot;: &quot;vmnodes-starter&quot;,
+-  &quot;version&quot;: &quot;0.1.0&quot;,
++  &quot;version&quot;: &quot;0.2.0&quot;,
+   &quot;private&quot;: true,
+   &quot;description&quot;: &quot;The smallest app that passes the VMnodes platform: sign-in, one published record type, health, a Dockerfile.&quot;,
+   &quot;main&quot;: &quot;server.js&quot;,
+   &quot;scripts&quot;: {
+     &quot;start&quot;: &quot;node server.js&quot;,
+     &quot;dev&quot;: &quot;node dev/run-local.js&quot;,
+-    &quot;test&quot;: &quot;node --check server.js &amp;&amp; node --check store.js&quot;
++    &quot;test&quot;: &quot;node test/migrate.js&quot;
+   },
+   &quot;engines&quot;: {
+     &quot;node&quot;: &quot;&gt;=22&quot;</code></pre>
+<h2 id="9-test-the-change-against-the-data-version-1-made">9. Test the change against the data version 1 made<a class="d-anchor" href="#9-test-the-change-against-the-data-version-1-made" aria-label="Link to this section">#</a></h2>
+<p>Save this as <code>test/migrate.js</code>. It builds version 1&#39;s table from literal text, not from <code>store.js</code>, so it keeps testing the old shape after <code>store.js</code> has moved on.</p>
+<pre data-lang="js"><code>// test/migrate.js: proves the new version can open the database the old version made.
+//   TEST_DATABASE_URL=postgres://localhost/stationery_scratch node test/migrate.js
+// Use an EMPTY scratch database: the test drops and recreates the table `items`.
+const postgres = require(&quot;postgres&quot;);
+const { openStore } = require(&quot;../store&quot;);
+
+const URL = process.env.TEST_DATABASE_URL;
+if (!URL) { console.log(&quot;FAIL set TEST_DATABASE_URL to an empty scratch Postgres database&quot;); process.exit(1); }
+
+// Version 1&#39;s table and statements, frozen here as TEXT. Do not build them from store.js:
+// once store.js changes, a test built from it would only prove the new code agrees with itself.
+const VERSION_1_TABLE = `create table items (
+  seq bigserial primary key, id uuid not null unique, name text not null,
+  quantity integer not null check (quantity &gt;= 0), added_at timestamptz not null)`;
+const VERSION_1_INSERT = &quot;insert into items (id, name, quantity, added_at) values ($1, $2, $3, now())&quot;;
+const VERSION_1_SELECT = &quot;select id, name, quantity, added_at from items order by seq desc&quot;;
+const NOT_REPEATABLE = &quot;alter table items add column reorder_level integer not null default 0&quot;;
+
+let pass = 0, fail = 0;
+function check(name, got, want) {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? &quot;ok  &quot; : &quot;FAIL&quot;} ${name}${ok ? &quot;&quot; : `  (expected ${JSON.stringify(want)}, got ${JSON.stringify(got)})`}`);
+}
+// Opens the database, and reports the database&#39;s own words if that fails.
+const opens = async (store) =&gt; { try { await store.init(); return &quot;opened&quot;; } catch (e) { return e.message; } };
+const id = (n) =&gt; `00000000-0000-4000-8000-00000000000${n}`;
+
+(async () =&gt; {
+  const sql = postgres(URL, { max: 5, onnotice: () =&gt; {} });
+  const fresh = async () =&gt; {
+    await sql.unsafe(&quot;drop table if exists items&quot;);
+    await sql.unsafe(VERSION_1_TABLE);
+    await sql.unsafe(VERSION_1_INSERT, [id(1), &quot;Stapler&quot;, 12]);
+    await sql.unsafe(VERSION_1_INSERT, [id(2), &quot;Pens&quot;, 40]);
+  };
+
+  // 1. Rows version 1 wrote are still there after version 2 opens the database.
+  await fresh();
+  const store = openStore({ env: { DATABASE_URL: URL }, log: { log() {} } });
+  check(&quot;version 2 opens the database version 1 made&quot;, await opens(store), &quot;opened&quot;);
+  const rows = await store.list();
+  check(&quot;CONTROL: the rows version 1 wrote are still there&quot;, rows.map((r) =&gt; [r.name, r.quantity]), [[&quot;Pens&quot;, 40], [&quot;Stapler&quot;, 12]]);
+  check(&quot;old rows get reorderLevel 0, meaning &#39;not set&#39;&quot;, rows.map((r) =&gt; r.reorderLevel), [0, 0]);
+
+  // 2. Opening it again, as every restart does, changes nothing and does not fail.
+  check(&quot;a second start-up opens it again without error&quot;, await opens(store), &quot;opened&quot;);
+  check(&quot;...and keeps every row&quot;, (await store.list()).length, 2);
+
+  // 3. New rows carry the new column.
+  await store.add({ id: id(3), name: &quot;Tape&quot;, quantity: 3, reorderLevel: 5, addedAt: new Date().toISOString() });
+  check(&quot;a new row keeps its reorderLevel&quot;, (await store.list())[0].reorderLevel, 5);
+
+  // 4. Rolling back is safe: version 1&#39;s own statements still work on the new table.
+  await sql.unsafe(VERSION_1_INSERT, [id(4), &quot;Folders&quot;, 7]);
+  const old = await sql.unsafe(VERSION_1_SELECT);
+  check(&quot;version 1&#39;s own insert and select still work on the new table&quot;, [old.length, old[0].name], [4, &quot;Folders&quot;]);
+
+  // 5. Two containers starting together must both succeed.
+  await fresh();
+  const starts = await Promise.allSettled([1, 2, 3].map(() =&gt; openStore({ env: { DATABASE_URL: URL }, log: { log() {} } }).init()));
+  check(&quot;three starts at once all succeed&quot;, starts.map((s) =&gt; s.status), [&quot;fulfilled&quot;, &quot;fulfilled&quot;, &quot;fulfilled&quot;]);
+
+  // 5b. ...including the very first start, when the table does not exist yet. Without the lock in
+  // store.js, two creators of the same table can collide.
+  const firstStarts = [];
+  for (let round = 0; round &lt; 8; round++) {
+    await sql.unsafe(&quot;drop table if exists items&quot;);
+    const r = await Promise.allSettled([1, 2, 3].map(() =&gt; openStore({ env: { DATABASE_URL: URL }, log: { log() {} } }).init()));
+    firstStarts.push(...r.map((x) =&gt; x.status));
+  }
+  check(&quot;three first-ever starts at once, eight times over, all succeed&quot;, [...new Set(firstStarts)], [&quot;fulfilled&quot;]);
+
+  // 6. CONTROL for the rules in store.js: the same change written without `if not exists` fails the second time.
+  await fresh();
+  await sql.unsafe(NOT_REPEATABLE);
+  let second = &quot;ran twice&quot;;
+  try { await sql.unsafe(NOT_REPEATABLE); } catch { second = &quot;refused&quot;; }
+  check(&quot;CONTROL: a change that is not safe to repeat is refused the second time&quot;, second, &quot;refused&quot;);
+
+  await sql.end({ timeout: 5 });
+  const FLOOR = 10;
+  if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
+  console.log(`\npassed=${pass} failed=${fail}`);
+  process.exit(fail === 0 ? 0 : 1);
+})().catch((e) =&gt; { console.error(&quot;FAIL the test itself crashed:&quot;, e.message); process.exit(1); });</code></pre>
+<p>Run it on an empty scratch database. It drops and recreates the table <code>items</code>:</p>
+<pre data-lang="bash"><code>TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test</code></pre>
+<p>It worked when the last line is <code>passed=10 failed=0</code>. A run with no <code>passed=</code> line is broken plumbing: read the first <code>FAIL</code> line, which carries the database&#39;s own message.</p>
+<h2 id="10-update-the-live-app">10. Update the live app<a class="d-anchor" href="#10-update-the-live-app" aria-label="Link to this section">#</a></h2>
+<p>Commit and push. In the portal, open the app&#39;s <strong>People</strong> tab, find the <strong>Deployment</strong> card and press <strong>Update to latest commit</strong>.</p>
+<p>It worked when the card reads &quot;Updating to&quot; and the new commit, then &quot;Your app is now running the latest commit.&quot; Open the app: the items you added in step 7 are still listed, and for each of them the <strong>Reorder at</strong> column is empty. Add an item with a quantity of 3 and a reorder level of 5: <strong>Low stock</strong> appears beside its quantity.</p>
+<p>If the update fails, the card reads &quot;The update didn&#39;t go online, so your app is still running the previous version.&quot; and the old version keeps serving. A change that cannot be applied to the database does this.</p>
+<h2 id="11-go-back-if-version-2-is-wrong">11. Go back if version 2 is wrong<a class="d-anchor" href="#11-go-back-if-version-2-is-wrong" aria-label="Link to this section">#</a></h2>
+<p>In <strong>Console</strong>, open the app&#39;s <strong>Deployments</strong> tab and press <strong>Roll back to this</strong> on the earlier deployment. It worked when <code>/health</code> shows <code>&quot;version&quot;:&quot;0.1.0&quot;</code> and the items are still listed, including the one you added in version 2.</p>
+<p>A roll back starts the earlier version against the database as it is now. It does not undo the new column. Version 1 never mentions the column, so it works against it.</p>
+<h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
+<ol><li>In <code>stationery-v2</code>, with an empty scratch database, <code>TEST_DATABASE_URL=postgres://localhost/stationery_scratch npm test</code> ends <code>passed=10 failed=0</code>.</li><li>A row written by version 1 survives, from the command line. Use one scratch database for all of it, and run <code>npm run dev</code> in another terminal each time, stopping it with Ctrl+C before the next. Check out the commit from before step 8, which is version 1:<pre data-lang="bash"><code>export DATABASE_URL=postgres://localhost/stationery_scratch
+git checkout &lt;the commit before step 8&gt;</code></pre>
+<p>With version 1 running, add an item:</p>
+<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;name&quot;:&quot;Pens&quot;,&quot;quantity&quot;:40}&#39; http://127.0.0.1:4100/api/items</code></pre>
+<p>It prints the new item, with no <code>reorderLevel</code>. Go back to version 2 with <code>git switch -</code>, start it and list:</p>
+<pre data-lang="bash"><code>curl -s http://127.0.0.1:4100/api/items</code></pre>
+<p>It prints the same item with <code>&quot;reorderLevel&quot;:0</code>. Check out version 1 again, start it and list: the item is there, without <code>reorderLevel</code>, so a roll back works.</p></li><li>A bad value is refused. With version 2 running, this prints <code>{&quot;error&quot;:&quot;reorderLevel must be a whole number from 0 to 100000&quot;}</code>:<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;name&quot;:&quot;Tape&quot;,&quot;quantity&quot;:3,&quot;reorderLevel&quot;:&quot;lots&quot;}&#39; http://127.0.0.1:4100/api/items</code></pre></li><li>On the live app, before and after step 10, <code>curl -s https://stationery-stock.acme.vmnodes.com/health</code> prints <code>&quot;storage&quot;:&quot;postgres&quot;</code> both times, <code>&quot;version&quot;:&quot;0.1.0&quot;</code> before and <code>&quot;version&quot;:&quot;0.2.0&quot;</code> after.</li><li>On the live app, the items added before the update are listed after it.</li></ol>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>No <code>&quot;database&quot;: true</code>, no data.</strong> An update clears everything the app kept in memory or on its disk, and the <strong>Deployment</strong> card warns &quot;Updating replaces your app&#39;s container. Anything not saved in its database is cleared.&quot; Put the key in <code>vmnodes.json</code> before the app holds anything you care about. Adding it later carries nothing over. See <a href="/concepts/data">Data</a>.</li><li><strong>Never edit or delete a <code>MIGRATIONS</code> entry that has shipped.</strong> A database that already ran the old text does not run an edited one, so two copies of the app end up with two different tables. Add a new entry at the end.</li><li><strong>Every entry must be safe to run again.</strong> The list runs at every start, on a database that already has the change. Write <code>create table if not exists</code> and <code>add column if not exists</code>. The control in <code>test/migrate.js</code> shows the same <code>alter table</code> without <code>if not exists</code> refused the second time.</li><li><strong>A new <code>not null</code> column needs a <code>default</code>.</strong> Without it the change fails on a table that already has rows: <code>contains null values</code>.</li><li><strong>Only add.</strong> Do not drop or rename a column in the same release that stops using it. The earlier version still reads it, and a roll back runs that version on your new database. To rename, add the new column and leave the old one in place.</li><li><strong>Do not retry a failed change.</strong> <code>store.js</code> retries only until the database answers, then runs the list once. Retrying every error hides a real failure behind &quot;could not reach the database&quot;, and it hid a start-up race the first time this test was written.</li><li><strong>A failed change stops the app, and so stops the update.</strong> The old version keeps running and the card says &quot;The update didn&#39;t go online, so your app is still running the previous version.&quot; On a first launch the page says &quot;Your app stopped while starting.&quot; Read the database&#39;s message in the app&#39;s logs: <strong>Console</strong>, the app, its <strong>Logs</strong> tab.</li><li><strong>Test against the old shape as a literal.</strong> A test that builds version 1&#39;s table from <code>store.js</code> agrees with whatever <code>store.js</code> says today, so it cannot catch a change that breaks old data.</li><li><strong>A roll back does not roll back data.</strong> Rows added by version 2 are still there in version 1. Keep changes additive so that is harmless.</li><li><strong>Removing <code>&quot;database&quot;</code> does not delete the database.</strong> The app keeps it. See <a href="/concepts/data">Data</a>.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/data">Data</a></li><li><a href="/concepts/apps">Apps</a></li><li><a href="/reference/vmnodes-json"><code>vmnodes.json</code></a></li><li><a href="/how-to/change-an-app">Change an app someone else built</a></li></ul>
+  <p class="d-meta"><a href="/how-to/keep-data-through-updates.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#1-remove-what-this-app-does-not-use">1. Remove what this app does not use</a></li><li class="l2"><a href="#2-ask-for-a-database">2. Ask for a database</a></li><li class="l2"><a href="#3-write-the-databases-shape-as-a-list-that-runs-at-every-start">3. Write the database&#39;s shape as a list that runs at every start</a></li><li class="l2"><a href="#4-replace-serverjs">4. Replace server.js</a></li><li class="l2"><a href="#5-match-the-files-to-the-new-role-the-file-list-and-the-test-script">5. Match the files to the new role, the file list and the test script</a></li><li class="l2"><a href="#6-prove-the-data-survives-a-restart-on-your-computer">6. Prove the data survives a restart on your computer</a></li><li class="l2"><a href="#7-launch-it-and-put-some-rows-in">7. Launch it and put some rows in</a></li><li class="l2"><a href="#8-change-the-database-add-a-column">8. Change the database: add a column</a></li><li class="l2"><a href="#9-test-the-change-against-the-data-version-1-made">9. Test the change against the data version 1 made</a></li><li class="l2"><a href="#10-update-the-live-app">10. Update the live app</a></li><li class="l2"><a href="#11-go-back-if-version-2-is-wrong">11. Go back if version 2 is wrong</a></li><li class="l2"><a href="#check-it-works">Check it works</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

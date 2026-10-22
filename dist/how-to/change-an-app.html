@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Change an app someone else built · VMnodes docs</title>
+<meta name="description" content="Make a change to an app that is already online and was built by someone else, and put it live without breaking it or losing its data. Read this when you are handed a repository and asked to change it. The example is a team link list at the org acme that gets a &quot;category&quot; on every link.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/change-an-app.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app" aria-current="page">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="change-an-app-someone-else-built">Change an app someone else built</h1>
+<p>Make a change to an app that is already online and was built by someone else, and put it live without breaking it or losing its data. Read this when you are handed a repository and asked to change it. The example is a team link list at the org <code>acme</code> that gets a &quot;category&quot; on every link.</p>
+<p>Updating an app rebuilds the latest commit on the default branch of the repository it was launched from, and replaces the running app. It cannot change the repository or the branch. Read <a href="/concepts/apps">Apps</a> once for how an update behaves.</p>
+<h2 id="1-learn-what-you-were-handed">1. Learn what you were handed<a class="d-anchor" href="#1-learn-what-you-were-handed" aria-label="Link to this section">#</a></h2>
+<p>Clone the repository and read four things before you change anything. The portal does not show an app&#39;s repository address, so ask whoever launched the app for it.</p>
+<pre data-lang="bash"><code>git clone https://github.com/acme/link-list.git
+cd link-list
+cat vmnodes.json
+grep -n &#39;requireRole&#39; server.js
+grep -n &#39;MIGRATIONS&#39; store.js
+grep -n &#39;&quot;test&quot;&#39; package.json</code></pre>
+<p>It worked when you can answer four questions from the output:</p>
+<ul><li><strong>Which roles does the app have?</strong> The <code>name</code> values under <code>roles</code>. In the example it is <code>links.editor</code>.</li><li><strong>Does it keep data in a database?</strong> <code>&quot;database&quot;: true</code>. In the example it does. If it is missing or <code>false</code>, an update clears everything the app holds, so stop and read <a href="/how-to/keep-data-through-updates">Keep data through updates</a> first.</li><li><strong>Which routes check the role?</strong> Every <code>requireRole</code> line. The example checks it once, before every route except <code>/health</code>.</li><li><strong>How do you run its tests?</strong> The <code>test</code> script. In the example, <code>node test/smoke.js</code>.</li></ul>
+<h2 id="2-run-the-tests-before-you-touch-anything">2. Run the tests before you touch anything<a class="d-anchor" href="#2-run-the-tests-before-you-touch-anything" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npm install
+npm test</code></pre>
+<p>It worked when the last line is <code>passed=25 failed=0</code>. Write that count down: it is your baseline, and the count must go up, not down, when you add checks. If the baseline already fails, say so to whoever asked, and do not start from a broken base.</p>
+<h2 id="3-find-out-what-is-running-now">3. Find out what is running now<a class="d-anchor" href="#3-find-out-what-is-running-now" aria-label="Link to this section">#</a></h2>
+<p>Someone may have pushed a commit that was never put online. Compare what the app says it runs with what the repository holds.</p>
+<pre data-lang="bash"><code>git rev-parse HEAD
+curl -s https://link-list.acme.vmnodes.com/health</code></pre>
+<p>In the portal, open the app&#39;s <strong>People</strong> tab and read <strong>Current commit:</strong> in the <strong>Deployment</strong> card.</p>
+<p>It worked when the <code>buildCommit</code> in the health answer and the <strong>Current commit:</strong> both equal the <code>git rev-parse HEAD</code> output. If they differ, the repository is ahead of what is online: your update will put the earlier, unreleased commits live too. Read <code>git log</code> for what they are.</p>
+<h2 id="4-make-the-change-small-enough-to-undo">4. Make the change, small enough to undo<a class="d-anchor" href="#4-make-the-change-small-enough-to-undo" aria-label="Link to this section">#</a></h2>
+<p>One change per update. Here the change is a category on each link, chosen from a fixed list, with a filter. Three decisions keep it safe:</p>
+<ul><li>The database gets a new column through the app&#39;s own <code>MIGRATIONS</code> list, with a default, so every link that already exists becomes <code>General</code>. Nothing is dropped or renamed.</li><li><code>vmnodes.json</code> does not change. No role is added, renamed or removed.</li><li>The version in <code>package.json</code> goes up, so <code>/health</code> tells you which one is running.</li></ul>
+<p>The database change, added at the end of the list:</p>
+<pre data-lang="diff"><code>--- a/store.js
++++ b/store.js
+@@ -17,6 +17,8 @@
+      added_by text not null,
+      added_at timestamptz not null
+    )`,
++  // Added in version 0.2.0. Links added before it get the category &quot;General&quot;.
++  `alter table links add column if not exists category text not null default &#39;General&#39;`,
+ ];
+ 
+ function memoryStore() {
+@@ -33,7 +35,7 @@
+ function postgresStore(url, { attempts = 5, delayMs = 1000, log = console } = {}) {
+   const postgres = require(&quot;postgres&quot;);
+   const sql = postgres(url, { max: 3, onnotice: () =&gt; {} });
+-  const toLink = (r) =&gt; ({ id: r.id, title: r.title, url: r.url, addedBy: r.added_by, addedAt: r.added_at.toISOString() });
++  const toLink = (r) =&gt; ({ id: r.id, title: r.title, url: r.url, addedBy: r.added_by, category: r.category, addedAt: r.added_at.toISOString() });
+   return {
+     kind: &quot;postgres&quot;,
+     async init() {
+@@ -52,11 +54,11 @@
+       }
+     },
+     async list() {
+-      const rows = await sql`select id, title, url, added_by, added_at from links order by seq desc`;
++      const rows = await sql`select id, title, url, category, added_by, added_at from links order by seq desc`;
+       return rows.map(toLink);
+     },
+     async add(link) {
+-      await sql`insert into links (id, title, url, added_by, added_at) values (${link.id}, ${link.title}, ${link.url}, ${link.addedBy}, ${link.addedAt})`;
++      await sql`insert into links (id, title, url, category, added_by, added_at) values (${link.id}, ${link.title}, ${link.url}, ${link.category}, ${link.addedBy}, ${link.addedAt})`;
+     },
+     async close() { await sql.end({ timeout: 5 }); },
+   };</code></pre>
+<p>The server takes, checks, saves and shows the category, and filters by it:</p>
+<pre data-lang="diff"><code>--- a/server.js
++++ b/server.js
+@@ -8,6 +8,8 @@
+ const APP_NAME = process.env.VMNODES_APP_NAME || &quot;link-list&quot;;
+ // Must match the role name in vmnodes.json exactly.
+ const EDITOR_ROLE = &quot;links.editor&quot;;
++// The categories a link can have. The first is the default.
++const CATEGORIES = [&quot;General&quot;, &quot;Forms&quot;, &quot;Training&quot;, &quot;Suppliers&quot;];
+ const VERSION = require(&quot;./package.json&quot;).version;
+ const BUILD_COMMIT = process.env.BUILD_COMMIT || null;
+ const PORT = Number(process.env.PORT || 3000);
+@@ -52,18 +54,22 @@
+ 
+ function shell(inner) {
+   return `&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;&lt;title&gt;Team links&lt;/title&gt;
+-&lt;style&gt;body{font:16px/1.5 system-ui,sans-serif;background:#0b0c10;color:#e8e8ee;max-width:760px;margin:0 auto;padding:16px}ul{list-style:none;padding:0}li{border-bottom:1px solid #2a2c35;padding:8px 0}a{color:#b8b8ff}small{color:#9a9cab}label{display:block;margin-top:8px}input{width:100%;background:#15161c;color:inherit;border:1px solid #2a2c35;border-radius:6px;padding:8px;box-sizing:border-box;font:inherit}button{margin-top:8px;background:#5b5bd6;color:#fff;border:0;border-radius:6px;padding:10px 16px;font:inherit}.err{border:1px solid #d65b5b;border-radius:6px;padding:8px}code{font-family:ui-monospace,monospace}&lt;/style&gt;&lt;/head&gt;&lt;body&gt;${inner}&lt;/body&gt;&lt;/html&gt;`;
++&lt;style&gt;body{font:16px/1.5 system-ui,sans-serif;background:#0b0c10;color:#e8e8ee;max-width:760px;margin:0 auto;padding:16px}ul{list-style:none;padding:0}li{border-bottom:1px solid #2a2c35;padding:8px 0}a{color:#b8b8ff}small{color:#9a9cab}label{display:block;margin-top:8px}input,select{width:100%;background:#15161c;color:inherit;border:1px solid #2a2c35;border-radius:6px;padding:8px;box-sizing:border-box;font:inherit}button{margin-top:8px;background:#5b5bd6;color:#fff;border:0;border-radius:6px;padding:10px 16px;font:inherit}.err{border:1px solid #d65b5b;border-radius:6px;padding:8px}code{font-family:ui-monospace,monospace}&lt;/style&gt;&lt;/head&gt;&lt;body&gt;${inner}&lt;/body&gt;&lt;/html&gt;`;
+ }
+ 
+-function page(user, links, { error = &quot;&quot;, values = {} } = {}) {
++function page(user, links, { error = &quot;&quot;, values = {}, filter = &quot;&quot; } = {}) {
+   const items = links.length
+-    ? links.map((l) =&gt; `&lt;li&gt;&lt;a href=&quot;${esc(l.url)}&quot; rel=&quot;noopener noreferrer&quot;&gt;${esc(l.title)}&lt;/a&gt;&lt;br&gt;&lt;small&gt;${esc(l.addedBy)}&lt;/small&gt;&lt;/li&gt;`).join(&quot;&quot;)
++    ? links.map((l) =&gt; `&lt;li&gt;&lt;a href=&quot;${esc(l.url)}&quot; rel=&quot;noopener noreferrer&quot;&gt;${esc(l.title)}&lt;/a&gt;&lt;br&gt;&lt;small&gt;${esc(l.category)} &amp;middot; ${esc(l.addedBy)}&lt;/small&gt;&lt;/li&gt;`).join(&quot;&quot;)
+     : &quot;&lt;li&gt;No links yet.&lt;/li&gt;&quot;;
++  const options = CATEGORIES.map((c) =&gt; `&lt;option${c === (values.category || CATEGORIES[0]) ? &quot; selected&quot; : &quot;&quot;}&gt;${esc(c)}&lt;/option&gt;`).join(&quot;&quot;);
++  const filters = [&quot;All&quot;, ...CATEGORIES].map((c) =&gt; (c === (filter || &quot;All&quot;) ? `&lt;strong&gt;${esc(c)}&lt;/strong&gt;` : `&lt;a href=&quot;${c === &quot;All&quot; ? &quot;/&quot; : `/?category=${encodeURIComponent(c)}`}&quot;&gt;${esc(c)}&lt;/a&gt;`)).join(&quot; | &quot;);
+   return shell(`&lt;h1&gt;Team links&lt;/h1&gt;&lt;p id=&quot;who&quot;&gt;Signed in as &lt;strong&gt;${esc(user.name || user.email)}&lt;/strong&gt;&lt;/p&gt;
+ &lt;form method=&quot;post&quot; action=&quot;/links&quot;&gt;${error ? `&lt;p class=&quot;err&quot; role=&quot;alert&quot;&gt;${esc(error)}&lt;/p&gt;` : &quot;&quot;}
+ &lt;label for=&quot;title&quot;&gt;Title&lt;/label&gt;&lt;input id=&quot;title&quot; name=&quot;title&quot; required maxlength=&quot;100&quot; value=&quot;${esc(values.title || &quot;&quot;)}&quot;&gt;
+ &lt;label for=&quot;url&quot;&gt;Address&lt;/label&gt;&lt;input id=&quot;url&quot; name=&quot;url&quot; required maxlength=&quot;500&quot; placeholder=&quot;https://&quot; value=&quot;${esc(values.url || &quot;&quot;)}&quot;&gt;
++&lt;label for=&quot;category&quot;&gt;Category&lt;/label&gt;&lt;select id=&quot;category&quot; name=&quot;category&quot;&gt;${options}&lt;/select&gt;
+ &lt;button type=&quot;submit&quot;&gt;Add link&lt;/button&gt;&lt;/form&gt;
++&lt;p id=&quot;filters&quot;&gt;${filters}&lt;/p&gt;
+ &lt;ul id=&quot;links&quot;&gt;${items}&lt;/ul&gt;`);
+ }
+ 
+@@ -78,19 +84,25 @@
+   const user = await identity.currentUser(req.headers);
+   identity.requireRole(user, EDITOR_ROLE);
+ 
+-  if (url.pathname === &quot;/&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, page(user, await store.list()), &quot;text/html; charset=utf-8&quot;);
+-  if (url.pathname === &quot;/api/links&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: await store.list() });
++  // ?category=Forms shows only that category; an unknown name shows nothing, not everything.
++  const filter = url.searchParams.get(&quot;category&quot;) || &quot;&quot;;
++  const visible = async () =&gt; (await store.list()).filter((l) =&gt; !filter || l.category === filter);
+ 
++  if (url.pathname === &quot;/&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, page(user, await visible(), { filter }), &quot;text/html; charset=utf-8&quot;);
++  if (url.pathname === &quot;/api/links&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: await visible() });
++
+   if ((url.pathname === &quot;/links&quot; || url.pathname === &quot;/api/links&quot;) &amp;&amp; req.method === &quot;POST&quot;) {
+-    const f = await readFields(req, [&quot;title&quot;, &quot;url&quot;]);
++    const f = await readFields(req, [&quot;title&quot;, &quot;url&quot;, &quot;category&quot;]);
++    if (!f.category) f.category = CATEGORIES[0];
+     const address = webAddress(f.url);
+     const problem = !f.title ? &quot;title is required&quot; : f.title.length &gt; 100 ? &quot;title must be at most 100 characters&quot;
++      : !CATEGORIES.includes(f.category) ? `category must be one of: ${CATEGORIES.join(&quot;, &quot;)}`
+       : !address || address.length &gt; 500 ? &quot;url must be a web address starting with http:// or https://&quot; : null;
+     if (problem) {
+       if (isApi) return send(res, 400, { error: problem });
+       return send(res, 400, page(user, await store.list(), { error: problem, values: f }), &quot;text/html; charset=utf-8&quot;);
+     }
+-    const link = { id: crypto.randomUUID(), title: f.title, url: address, addedBy: user.name || user.email, addedAt: new Date().toISOString() };
++    const link = { id: crypto.randomUUID(), title: f.title, url: address, category: f.category, addedBy: user.name || user.email, addedAt: new Date().toISOString() };
+     await store.add(link);
+     if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+     return send(res, 201, link);</code></pre>
+<p>The version, in <code>package.json</code> and <code>package-lock.json</code> together:</p>
+<pre data-lang="bash"><code>npm version 0.2.0 --no-git-tag-version</code></pre>
+<p>It worked when that prints <code>v0.2.0</code> and <code>git diff --stat</code> lists <code>package-lock.json</code>, <code>package.json</code>, <code>server.js</code> and <code>store.js</code>, and no other file.</p>
+<h2 id="5-add-tests-for-the-change">5. Add tests for the change<a class="d-anchor" href="#5-add-tests-for-the-change" aria-label="Link to this section">#</a></h2>
+<p>Add these checks to <code>test/smoke.js</code>. They test the new rule in both directions: a known category is accepted and an unknown one is refused, the filter returns only that category, and an unknown filter returns nothing rather than everything.</p>
+<pre data-lang="diff"><code>--- a/test/smoke.js
++++ b/test/smoke.js
+@@ -102,13 +102,28 @@
+   check(&quot;the form post answers 303 back to the list&quot;, posted.status, 303);
+   check(&quot;...and the new link is listed&quot;, (await json(await editor(), &quot;GET&quot;, &quot;/api/links&quot;)).json().items.length, 2);
+ 
+-  // --- 7. A database that cannot be reached stops the app; it never falls back --
++  // --- 7. Categories ------------------------------------------------------------
++  const rota = (await json(await editor(), &quot;GET&quot;, &quot;/api/links&quot;)).json().items.find((l) =&gt; l.title.startsWith(&quot;Rota&quot;));
++  check(&quot;a link added without a category is &#39;General&#39;&quot;, rota.category, &quot;General&quot;);
++  const forms = await json(await editor(), &quot;POST&quot;, &quot;/api/links&quot;, { title: &quot;Leave form&quot;, url: &quot;https://example.com/leave&quot;, category: &quot;Forms&quot; });
++  check(&quot;CONTROL: a link with a known category -&gt; 201 and keeps it&quot;, [forms.status, forms.json().category], [201, &quot;Forms&quot;]);
++  check(&quot;an unknown category -&gt; 400 naming the choices&quot;, [(await json(await editor(), &quot;POST&quot;, &quot;/api/links&quot;, { title: &quot;A&quot;, url: &quot;https://example.com&quot;, category: &quot;Banana&quot; })).status], [400]);
++  check(&quot;...with the message that lists the categories&quot;, (await json(await editor(), &quot;POST&quot;, &quot;/api/links&quot;, { title: &quot;A&quot;, url: &quot;https://example.com&quot;, category: &quot;Banana&quot; })).json().error, &quot;category must be one of: General, Forms, Training, Suppliers&quot;);
++  const onlyForms = (await json(await editor(), &quot;GET&quot;, &quot;/api/links?category=Forms&quot;)).json().items;
++  check(&quot;?category=Forms lists only Forms&quot;, [onlyForms.length, onlyForms.every((l) =&gt; l.category === &quot;Forms&quot;)], [1, true]);
++  check(&quot;?category=Nope lists nothing, not everything&quot;, (await json(await editor(), &quot;GET&quot;, &quot;/api/links?category=Nope&quot;)).json().items.length, 0);
++  const formPost = await request(`${portal.issuer}/links`, { method: &quot;POST&quot;, headers: { &quot;content-type&quot;: &quot;application/x-www-form-urlencoded&quot; }, body: &quot;title=Safety+course&amp;url=https%3A%2F%2Fexample.com%2Fs&amp;category=Training&quot; });
++  check(&quot;the form&#39;s category field is saved&quot;, [formPost.status, (await json(await editor(), &quot;GET&quot;, &quot;/api/links?category=Training&quot;)).json().items.length], [303, 1]);
++  const selectHtml = (/&lt;select id=&quot;category&quot;[^&gt;]*&gt;([\s\S]*?)&lt;\/select&gt;/.exec((await request(`${portal.issuer}/`)).body) || [])[1] || &quot;&quot;;
++  check(&quot;the page offers every category in a select&quot;, [&quot;General&quot;, &quot;Forms&quot;, &quot;Training&quot;, &quot;Suppliers&quot;].every((c) =&gt; selectHtml.includes(`&gt;${c}&lt;/option&gt;`)), true);
++
++  // --- 8. A database that cannot be reached stops the app; it never falls back --
+   const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: &quot;postgres://links@127.0.0.1:1/links&quot; });
+   check(&quot;with DATABASE_URL set and no database, the app refuses to START&quot;, noDb.exited !== undefined &amp;&amp; noDb.exited !== 0, true);
+   check(&quot;...and says it will not start without its database&quot;, /will not start without its database/.test(noDb.out()), true);
+ 
+-  // --- 8. The count itself: zero checks run must never read as a pass ---------
+-  const FLOOR = 20;
++  // --- 9. The count itself: zero checks run must never read as a pass ---------
++  const FLOOR = 30;
+   if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
+   console.log(`\npassed=${pass} failed=${fail}`);
+   finish(fail === 0 ? 0 : 1);</code></pre>
+<pre data-lang="bash"><code>npm test</code></pre>
+<p>It worked when the last line is <code>passed=33 failed=0</code>, higher than the baseline.</p>
+<h2 id="6-commit-it-without-pushing-yet">6. Commit it, without pushing yet<a class="d-anchor" href="#6-commit-it-without-pushing-yet" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>git add -A
+git commit -m &quot;Add a category to each link&quot;</code></pre>
+<p>It worked when <code>git status -sb</code> prints a first line that starts <code>## main</code> and says <code>ahead 1</code>, and no file is listed below it.</p>
+<h2 id="7-try-it-on-the-data-the-old-version-made">7. Try it on the data the old version made<a class="d-anchor" href="#7-try-it-on-the-data-the-old-version-made" aria-label="Link to this section">#</a></h2>
+<p>Run the old version against a scratch database, add a link, then run the new version against the same database. Use an empty scratch database. <code>HEAD~1</code> is the commit before yours.</p>
+<pre data-lang="bash"><code>export DATABASE_URL=postgres://localhost/links_scratch
+git checkout HEAD~1
+npm run dev</code></pre>
+<p>In another terminal add a link, then stop <code>npm run dev</code> with Ctrl+C:</p>
+<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;title&quot;:&quot;Old link&quot;,&quot;url&quot;:&quot;https://example.com/old&quot;}&#39; http://127.0.0.1:4100/api/links</code></pre>
+<p>Go back to your commit, start <code>npm run dev</code> again, and list:</p>
+<pre data-lang="bash"><code>git switch -
+npm run dev</code></pre>
+<pre data-lang="bash"><code>curl -s http://127.0.0.1:4100/api/links</code></pre>
+<p>It worked when the old link comes back with <code>&quot;category&quot;:&quot;General&quot;</code>. Add one with <code>&quot;category&quot;:&quot;Forms&quot;</code>, then <code>curl -s &#39;http://127.0.0.1:4100/api/links?category=Forms&#39;</code> lists only that one.</p>
+<h2 id="8-put-it-on-the-default-branch">8. Put it on the default branch<a class="d-anchor" href="#8-put-it-on-the-default-branch" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>git push</code></pre>
+<p>It worked when <code>git status -sb</code> prints a first line that starts <code>## main...origin/main</code> with no <code>ahead</code> after it. Use your repository&#39;s own default branch name if it is not <code>main</code>: an update reads only that branch.</p>
+<h2 id="9-update-the-app">9. Update the app<a class="d-anchor" href="#9-update-the-app" aria-label="Link to this section">#</a></h2>
+<p>An administrator opens the app&#39;s <strong>People</strong> tab, finds the <strong>Deployment</strong> card and presses <strong>Update to latest commit</strong>.</p>
+<p>It worked when the card reads &quot;Updating to&quot; and the new commit, then &quot;Your app is now running the latest commit.&quot; Reload the app: the form has a <strong>Category</strong> choice, every link that was there before reads <strong>General</strong>, and <code>/health</code> shows <code>&quot;version&quot;:&quot;0.2.0&quot;</code> with a <code>buildCommit</code> equal to your new <code>git rev-parse HEAD</code>.</p>
+<p>If the update fails, the card reads &quot;The update didn&#39;t go online, so your app is still running the previous version.&quot; and the old version keeps serving. Nothing was lost.</p>
+<h2 id="10-go-back-if-it-is-wrong">10. Go back if it is wrong<a class="d-anchor" href="#10-go-back-if-it-is-wrong" aria-label="Link to this section">#</a></h2>
+<p>In <strong>Console</strong>, open the app&#39;s <strong>Deployments</strong> tab and press <strong>Roll back to this</strong> on the earlier deployment. It worked when <code>/health</code> shows <code>&quot;version&quot;:&quot;0.1.0&quot;</code> and every link is still listed. The database keeps its new column. The old version never reads it, so it works against it.</p>
+<p>Then fix the problem in a new commit and update again. Do not leave the repository&#39;s default branch holding a commit you rolled back, because the next <strong>Update to latest commit</strong> will put it live again.</p>
+<h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
+<ol><li>Before the change, <code>npm test</code> ends <code>passed=25 failed=0</code>. After it, <code>passed=33 failed=0</code>.</li><li>The role list is untouched. This prints <code>unchanged</code>:<pre data-lang="bash"><code>git diff --exit-code HEAD~1 -- vmnodes.json &amp;&amp; echo unchanged</code></pre></li><li>With <code>npm run dev</code> running against a scratch database that version 1 filled, a link written by the old version reads <code>&quot;category&quot;:&quot;General&quot;</code>, and a bad category is refused. This prints <code>{&quot;error&quot;:&quot;category must be one of: General, Forms, Training, Suppliers&quot;}</code>:<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;title&quot;:&quot;A&quot;,&quot;url&quot;:&quot;https://example.com&quot;,&quot;category&quot;:&quot;Banana&quot;}&#39; http://127.0.0.1:4100/api/links</code></pre></li><li>After the update, <code>curl -s https://link-list.acme.vmnodes.com/health</code> prints <code>&quot;version&quot;:&quot;0.2.0&quot;</code>, and its <code>buildCommit</code> equals the output of <code>git rev-parse HEAD</code>.</li><li>On the live app, the links that existed before the update are all listed and all read <strong>General</strong>. Add a link with the category <strong>Forms</strong>: choosing <strong>Forms</strong> in the filter row shows only it.</li></ol>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>Check what is live before you change anything.</strong> The repository may be ahead of the app, and your update then puts live work you did not write. Compare <code>buildCommit</code> with <code>git rev-parse HEAD</code>.</li><li><strong>Know whether the app keeps its data before you press the button.</strong> Without <code>&quot;database&quot;: true</code> an update clears everything the app held, and the <strong>Deployment</strong> card warns &quot;Updating replaces your app&#39;s container. Anything not saved in its database is cleared.&quot; Read the card first.</li><li><strong>Never rename or remove a role in use.</strong> Taking a role out of <code>vmnodes.json</code> retires it, and a new name is held by nobody, so the people who used the app are locked out of everything that checks it. Add the new role, give it with <strong>Change roles</strong>, and retire the old one in a later update. See <a href="/concepts/roles">Roles</a>.</li><li><strong>An update does not give anyone a role the new commit adds.</strong> If you add a role, give it on the <strong>People</strong> tab with <strong>Change roles</strong>.</li><li><strong>Change the database by adding to the end of <code>MIGRATIONS</code>.</strong> Do not edit an entry that has shipped, and do not drop or rename a column. The rules and the test for them are in <a href="/how-to/keep-data-through-updates">Keep data through updates</a>.</li><li><strong>Give a new column a default.</strong> <code>add column ... not null</code> with no default fails on a table that already has rows, and a failed change stops the app and the update.</li><li><strong>Validate on the server.</strong> The new <code>&lt;select&gt;</code> is a courtesy; a request that bypasses the form can send any category, so <code>server.js</code> checks the list.</li><li><strong>Add a new file to the <code>Dockerfile</code>&#39;s <code>COPY</code> line.</strong> A file the server loads that is not copied builds, then fails with &quot;Your app stopped while starting.&quot;</li><li><strong>Do not change what the platform relies on.</strong> Keep <code>GET /health</code> answering with no sign-in and the app listening on port 3000.</li><li><strong>One thing per update.</strong> A change you cannot undo alone, such as a drive-by fix mixed in, makes a roll back lose it too.</li><li><strong>Only an administrator can press the button, one update at a time.</strong> If an update is already running, wait for it.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/apps">Apps</a></li><li><a href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a href="/concepts/roles">Roles</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/how-to/change-an-app.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#1-learn-what-you-were-handed">1. Learn what you were handed</a></li><li class="l2"><a href="#2-run-the-tests-before-you-touch-anything">2. Run the tests before you touch anything</a></li><li class="l2"><a href="#3-find-out-what-is-running-now">3. Find out what is running now</a></li><li class="l2"><a href="#4-make-the-change-small-enough-to-undo">4. Make the change, small enough to undo</a></li><li class="l2"><a href="#5-add-tests-for-the-change">5. Add tests for the change</a></li><li class="l2"><a href="#6-commit-it-without-pushing-yet">6. Commit it, without pushing yet</a></li><li class="l2"><a href="#7-try-it-on-the-data-the-old-version-made">7. Try it on the data the old version made</a></li><li class="l2"><a href="#8-put-it-on-the-default-branch">8. Put it on the default branch</a></li><li class="l2"><a href="#9-update-the-app">9. Update the app</a></li><li class="l2"><a href="#10-go-back-if-it-is-wrong">10. Go back if it is wrong</a></li><li class="l2"><a href="#check-it-works">Check it works</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build a form-and-list app · VMnodes docs</title>
+<meta name="description" content="Build an app where signed-in staff fill in a form and see every entry in a list, and only people you choose can use it. Read this when a customer asks for a sign-in book, a log, or any &quot;add a row, see the rows&quot; tool. The example is a visitor book for the org acme: reception signs visitors in and out, and the entries are kept in the app&#39;s database.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/form-and-list.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list" aria-current="page">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="build-a-form-and-list-app">Build a form-and-list app</h1>
+<p>Build an app where signed-in staff fill in a form and see every entry in a list, and only people you choose can use it. Read this when a customer asks for a sign-in book, a log, or any &quot;add a row, see the rows&quot; tool. The example is a visitor book for the org <code>acme</code>: reception signs visitors in and out, and the entries are kept in the app&#39;s database.</p>
+<p>You start from the starter, so do <a href="/getting-started">Getting started</a> steps 1 to 3 first. You then have a folder with <code>package.json</code>, <code>vmnodes.json</code>, <code>Dockerfile</code>, <code>server.js</code>, <code>store.js</code>, <code>publish.js</code> and <code>manifest.json</code>, and your own git repository.</p>
+<h2 id="1-remove-what-this-app-does-not-use">1. Remove what this app does not use<a class="d-anchor" href="#1-remove-what-this-app-does-not-use" aria-label="Link to this section">#</a></h2>
+<p>This app shares nothing with other apps and does not use the advanced path, so delete both files that belong to them.</p>
+<pre data-lang="bash"><code>rm publish.js manifest.json
+ls</code></pre>
+<p>It worked when <code>ls</code> lists <code>Dockerfile</code>, <code>package.json</code>, <code>server.js</code>, <code>store.js</code> and <code>vmnodes.json</code>, and does not list <code>publish.js</code> or <code>manifest.json</code>. Leaving <code>manifest.json</code> behind makes the launch page say your app mentions roles it does not declare, because it still names the starter&#39;s role.</p>
+<h2 id="2-declare-one-role-and-a-database">2. Declare one role and a database<a class="d-anchor" href="#2-declare-one-role-and-a-database" aria-label="Link to this section">#</a></h2>
+<p>Replace <code>vmnodes.json</code> with this. The role is what reception needs to be given, and <code>&quot;database&quot;: true</code> makes VMnodes create the app&#39;s database and pass its address in <code>DATABASE_URL</code>.</p>
+<pre data-lang="json"><code>{
+  &quot;apiVersion&quot;: &quot;vmnodes.com/v1&quot;,
+  &quot;roles&quot;: [
+    {
+      &quot;name&quot;: &quot;visitors.staff&quot;,
+      &quot;description&quot;: &quot;Can sign visitors in and out, and see who is on the visitor list.&quot;
+    }
+  ],
+  &quot;database&quot;: true
+}</code></pre>
+<p>It worked when this prints <code>apiVersion roles database</code>:</p>
+<pre data-lang="bash"><code>node -e &#39;console.log(Object.keys(require(&quot;./vmnodes.json&quot;)).join(&quot; &quot;))&#39;</code></pre>
+<p>The role name must be the same string in <code>vmnodes.json</code>, in <code>server.js</code> and in <code>dev/mock-portal.js</code>. <a href="/concepts/roles">Roles</a> explains the format.</p>
+<h2 id="3-replace-storejs">3. Replace <code>store.js</code><a class="d-anchor" href="#3-replace-storejs" aria-label="Link to this section">#</a></h2>
+<p><code>store.js</code> keeps the visits. One decision, made from <code>DATABASE_URL</code>, picks the database or memory, and the app refuses to start when the database is set but unreachable, instead of quietly keeping visits where the next restart loses them.</p>
+<pre data-lang="js"><code>// store.js: where the visits are kept.
+//
+// ONE decision, made here from DATABASE_URL:
+//   DATABASE_URL set   visits are kept in Postgres, across restarts and updates.
+//   not set            visits are kept in memory and cleared on every restart.
+//
+// On the platform, DATABASE_URL is set for you when vmnodes.json says
+// &quot;database&quot;: true. Locally it is not set, so `npm run dev` uses memory.
+//
+// There is no fallback. If DATABASE_URL is set but the database cannot be
+// reached, the app refuses to start rather than quietly keeping visits in
+// memory, where they would be lost at the next restart.
+
+function memoryStore() {
+  const visits = [];
+  return {
+    kind: &quot;memory&quot;,
+    async init() {},
+    async list(limit = 100) { return visits.slice(0, limit).map((v) =&gt; ({ ...v })); },
+    async add(visit) { visits.unshift({ ...visit, leftAt: null }); },
+    // Returns the updated visit, or null when no visit with that id is still on site.
+    async markLeft(id, leftAt) {
+      const v = visits.find((x) =&gt; x.id === id &amp;&amp; x.leftAt === null);
+      if (!v) return null;
+      v.leftAt = leftAt;
+      return { ...v };
+    },
+    async close() {},
+  };
+}
+
+function postgresStore(url, { attempts = 5, delayMs = 1000, log = console } = {}) {
+  const postgres = require(&quot;postgres&quot;);
+  const sql = postgres(url, { max: 3, onnotice: () =&gt; {} });
+  const toVisit = (r) =&gt; ({
+    id: r.id, visitor: r.visitor, company: r.company, visiting: r.visiting,
+    arrivedAt: r.arrived_at.toISOString(), leftAt: r.left_at ? r.left_at.toISOString() : null,
+  });
+  return {
+    kind: &quot;postgres&quot;,
+    async init() {
+      for (let i = 1; ; i++) {
+        try {
+          await sql`create table if not exists visits (
+            seq bigserial primary key,
+            id uuid not null unique,
+            visitor text not null,
+            company text not null default &#39;&#39;,
+            visiting text not null,
+            arrived_at timestamptz not null,
+            left_at timestamptz
+          )`;
+          return;
+        } catch (err) {
+          if (i &gt;= attempts) throw new Error(`could not reach the database after ${attempts} tries: ${err.message}`);
+          log.log(`database not reachable yet (try ${i} of ${attempts}): ${err.message}`);
+          await new Promise((r) =&gt; setTimeout(r, delayMs));
+        }
+      }
+    },
+    async list(limit = 100) {
+      const rows = await sql`select id, visitor, company, visiting, arrived_at, left_at from visits order by seq desc limit ${limit}`;
+      return rows.map(toVisit);
+    },
+    async add(v) {
+      await sql`insert into visits (id, visitor, company, visiting, arrived_at)
+                values (${v.id}, ${v.visitor}, ${v.company}, ${v.visiting}, ${v.arrivedAt})`;
+    },
+    async markLeft(id, leftAt) {
+      const rows = await sql`update visits set left_at = ${leftAt} where id = ${id} and left_at is null
+                             returning id, visitor, company, visiting, arrived_at, left_at`;
+      return rows[0] ? toVisit(rows[0]) : null;
+    },
+    async close() { await sql.end({ timeout: 5 }); },
+  };
+}
+
+function openStore({ env = process.env, log = console } = {}) {
+  return env.DATABASE_URL ? postgresStore(env.DATABASE_URL, { log }) : memoryStore();
+}
+
+module.exports = { openStore };</code></pre>
+<h2 id="4-replace-serverjs">4. Replace <code>server.js</code><a class="d-anchor" href="#4-replace-serverjs" aria-label="Link to this section">#</a></h2>
+<p><code>server.js</code> is the whole app: the page with its form and list, the routes, and the checks that decide who may do what.</p>
+<pre data-lang="js"><code>// server.js: the whole app. A visitor book: people with the &quot;staff&quot; role sign
+// visitors in when they arrive, see who has been in, and sign them out when they leave.
+//
+// APP_NAME is the name the app was put online as: the platform sets VMNODES_APP_NAME.
+const http = require(&quot;node:http&quot;);
+const crypto = require(&quot;node:crypto&quot;);
+// Sign-in checking comes from the platform&#39;s own package, @vmnodes/identity.
+const { VmnodesIdentity, IdentityError } = require(&quot;@vmnodes/identity&quot;);
+const { openStore } = require(&quot;./store&quot;);
+
+const APP_NAME = process.env.VMNODES_APP_NAME || &quot;visitor-book&quot;;
+// Must match the role name in vmnodes.json exactly (&quot;visitors.staff&quot;).
+const ROLE_PREFIX = &quot;visitors&quot;;
+const STAFF_ROLE = `${ROLE_PREFIX}.staff`;
+const VERSION = require(&quot;./package.json&quot;).version;
+// Set when the image is built (see Dockerfile). Reported as-is, never guessed.
+const BUILD_COMMIT = process.env.BUILD_COMMIT || null;
+// The platform does NOT set PORT: a portal launch sends traffic to port 3000, fixed.
+// (PORT is only for local tests.)
+const PORT = Number(process.env.PORT || 3000);
+// Unset, the app listens on every address, which a container needs.
+const LISTEN_ADDRESS = process.env.LISTEN_ADDRESS || undefined;
+
+// Refuses to START if sign-in is not configured, so a misconfigured app never runs unprotected.
+let identity;
+try {
+  identity = new VmnodesIdentity();
+} catch (err) {
+  console.error(`${err.message}\nThe platform sets these when your app is deployed; locally, \`npm run dev\` sets them for you.`);
+  process.exit(1);
+}
+const store = openStore();
+
+const KEPT = {
+  postgres: &quot;Visits are kept in this app&#39;s database, across restarts and updates.&quot;,
+  memory: &quot;Visits are kept in memory, so they are cleared when the app restarts or is updated.&quot;,
+};
+const LIMITS = { visitor: 100, company: 100, visiting: 100 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Every piece of text a person typed goes through esc() before it goes into a page.
+const esc = (s) =&gt; String(s).replace(/[&amp;&lt;&gt;&quot;&#39;]/g, (c) =&gt; ({ &quot;&amp;&quot;: &quot;&amp;amp;&quot;, &quot;&lt;&quot;: &quot;&amp;lt;&quot;, &quot;&gt;&quot;: &quot;&amp;gt;&quot;, &#39;&quot;&#39;: &quot;&amp;quot;&quot;, &quot;&#39;&quot;: &quot;&amp;#39;&quot; }[c]));
+
+function send(res, status, body, type = &quot;application/json&quot;) {
+  res.writeHead(status, { &quot;content-type&quot;: type });
+  res.end(type === &quot;application/json&quot; ? JSON.stringify(body) : body);
+}
+
+function readBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) =&gt; {
+    let size = 0; const chunks = [];
+    req.on(&quot;data&quot;, (c) =&gt; { size += c.length; if (size &gt; limit) { reject(new IdentityError(&quot;body too large&quot;, 413)); req.destroy(); } else chunks.push(c); });
+    req.on(&quot;end&quot;, () =&gt; resolve(Buffer.concat(chunks).toString(&quot;utf8&quot;)));
+    req.on(&quot;error&quot;, reject);
+  });
+}
+
+// Reads the three fields from a form post or a JSON post. Trims, and never trusts the types.
+async function readVisitFields(req) {
+  const raw = await readBody(req);
+  const get = (req.headers[&quot;content-type&quot;] || &quot;&quot;).includes(&quot;application/json&quot;)
+    ? ((o) =&gt; (k) =&gt; (typeof o[k] === &quot;string&quot; ? o[k] : &quot;&quot;))(JSON.parse(raw || &quot;{}&quot;))
+    : ((p) =&gt; (k) =&gt; p.get(k) || &quot;&quot;)(new URLSearchParams(raw));
+  return { visitor: get(&quot;visitor&quot;).trim(), company: get(&quot;company&quot;).trim(), visiting: get(&quot;visiting&quot;).trim() };
+}
+
+// The server-side checks. The form&#39;s `required` and `maxlength` are a courtesy to
+// people; this is what actually decides, because anyone can send a request without the form.
+function problemWith(f) {
+  if (!f.visitor) return &quot;visitor is required&quot;;
+  if (!f.visiting) return &quot;visiting is required&quot;;
+  for (const k of Object.keys(LIMITS)) if (f[k].length &gt; LIMITS[k]) return `${k} must be at most ${LIMITS[k]} characters`;
+  return null;
+}
+
+const when = (iso) =&gt; iso.slice(0, 16).replace(&quot;T&quot;, &quot; &quot;);
+
+function shell(title, inner) {
+  return `&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;&lt;title&gt;${esc(title)}&lt;/title&gt;
+&lt;style&gt;body{font:16px/1.5 system-ui,sans-serif;background:#0b0c10;color:#e8e8ee;max-width:760px;margin:0 auto;padding:16px}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid #2a2c35;padding:8px 6px}small,th{color:#9a9cab;font-weight:normal}label{display:block;margin-top:8px}input{width:100%;background:#15161c;color:inherit;border:1px solid #2a2c35;border-radius:6px;padding:8px;box-sizing:border-box;font:inherit}button{margin-top:8px;background:#5b5bd6;color:#fff;border:0;border-radius:6px;padding:10px 16px;font:inherit}.err{border:1px solid #d65b5b;border-radius:6px;padding:8px}code{font-family:ui-monospace,monospace}&lt;/style&gt;&lt;/head&gt;
+&lt;body&gt;${inner}&lt;/body&gt;&lt;/html&gt;`;
+}
+
+function page(user, visits, { error = &quot;&quot;, values = {} } = {}) {
+  const rows = visits.length
+    ? visits.map((v) =&gt; `&lt;tr&gt;&lt;td&gt;${esc(v.visitor)}${v.company ? `&lt;br&gt;&lt;small&gt;${esc(v.company)}&lt;/small&gt;` : &quot;&quot;}&lt;/td&gt;&lt;td&gt;${esc(v.visiting)}&lt;/td&gt;&lt;td&gt;${esc(when(v.arrivedAt))}&lt;/td&gt;
+&lt;td&gt;${v.leftAt ? esc(when(v.leftAt)) : `&lt;form method=&quot;post&quot; action=&quot;/visits/${esc(v.id)}/leave&quot;&gt;&lt;button type=&quot;submit&quot;&gt;Sign out&lt;/button&gt;&lt;/form&gt;`}&lt;/td&gt;&lt;/tr&gt;`).join(&quot;&quot;)
+    : `&lt;tr&gt;&lt;td colspan=&quot;4&quot;&gt;Nobody has signed in yet.&lt;/td&gt;&lt;/tr&gt;`;
+  const val = (k) =&gt; esc(values[k] || &quot;&quot;);
+  return shell(&quot;Visitor book&quot;, `&lt;h1&gt;Visitor book&lt;/h1&gt;&lt;p id=&quot;who&quot;&gt;Signed in as &lt;strong&gt;${esc(user.name || user.email)}&lt;/strong&gt;&lt;/p&gt;
+&lt;form method=&quot;post&quot; action=&quot;/visits&quot;&gt;${error ? `&lt;p class=&quot;err&quot; role=&quot;alert&quot;&gt;${esc(error)}&lt;/p&gt;` : &quot;&quot;}
+&lt;label for=&quot;visitor&quot;&gt;Visitor&#39;s name&lt;/label&gt;&lt;input id=&quot;visitor&quot; name=&quot;visitor&quot; required maxlength=&quot;${LIMITS.visitor}&quot; value=&quot;${val(&quot;visitor&quot;)}&quot;&gt;
+&lt;label for=&quot;company&quot;&gt;Company (optional)&lt;/label&gt;&lt;input id=&quot;company&quot; name=&quot;company&quot; maxlength=&quot;${LIMITS.company}&quot; value=&quot;${val(&quot;company&quot;)}&quot;&gt;
+&lt;label for=&quot;visiting&quot;&gt;Who are they here to see?&lt;/label&gt;&lt;input id=&quot;visiting&quot; name=&quot;visiting&quot; required maxlength=&quot;${LIMITS.visiting}&quot; value=&quot;${val(&quot;visiting&quot;)}&quot;&gt;
+&lt;button type=&quot;submit&quot;&gt;Sign in visitor&lt;/button&gt;&lt;/form&gt;
+&lt;h2&gt;Visitors&lt;/h2&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Visitor&lt;/th&gt;&lt;th&gt;Visiting&lt;/th&gt;&lt;th&gt;Arrived&lt;/th&gt;&lt;th&gt;Left&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;visits&quot;&gt;${rows}&lt;/tbody&gt;&lt;/table&gt;
+&lt;p id=&quot;kept&quot;&gt;&lt;small&gt;${esc(KEPT[store.kind])}&lt;/small&gt;&lt;/p&gt;`);
+}
+
+async function handle(req, res) {
+  const url = new URL(req.url, &quot;http://app&quot;);
+  const isApi = url.pathname.startsWith(&quot;/api/&quot;);
+
+  // Health is checked by the platform directly, with no signed-in person, so
+  // it must NOT require sign-in. It must also be honest: say what is running.
+  if (url.pathname === &quot;/health&quot;) {
+    return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
+  }
+
+  // Everything else: who is this? (Throws 401/503 if we cannot tell.)
+  const user = await identity.currentUser(req.headers);
+  // Every route below is for staff. Checked on the SERVER, on every request.
+  identity.requireRole(user, STAFF_ROLE);
+
+  if (url.pathname === &quot;/&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, page(user, await store.list()), &quot;text/html; charset=utf-8&quot;);
+  if (url.pathname === &quot;/api/visits&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: await store.list() });
+
+  if ((url.pathname === &quot;/visits&quot; || url.pathname === &quot;/api/visits&quot;) &amp;&amp; req.method === &quot;POST&quot;) {
+    const fields = await readVisitFields(req);
+    const problem = problemWith(fields);
+    if (problem) {
+      if (isApi) return send(res, 400, { error: problem });
+      return send(res, 400, page(user, await store.list(), { error: problem, values: fields }), &quot;text/html; charset=utf-8&quot;);
+    }
+    const visit = { id: crypto.randomUUID(), ...fields, arrivedAt: new Date().toISOString() };
+    await store.add(visit);
+    if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+    return send(res, 201, { ...visit, leftAt: null });
+  }
+
+  const leave = url.pathname.match(/^\/(?:api\/)?visits\/([^/]+)\/leave$/);
+  if (leave &amp;&amp; req.method === &quot;POST&quot;) {
+    // An id that is not a UUID can never match a row; say so here instead of letting the database throw.
+    const visit = UUID.test(leave[1]) ? await store.markLeft(leave[1].toLowerCase(), new Date().toISOString()) : null;
+    if (!visit) return send(res, 404, { error: &quot;no such visitor on site&quot; });
+    if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+    return send(res, 200, visit);
+  }
+
+  return send(res, 404, { error: &quot;not found&quot; });
+}
+
+const server = http.createServer((req, res) =&gt; {
+  handle(req, res).catch((err) =&gt; {
+    const status = err instanceof IdentityError ? err.status : err instanceof SyntaxError ? 400 : 500;
+    if (status &gt;= 500) console.error(err.cause || err);
+    const message = status === 500 ? &quot;something went wrong&quot; : err.message;
+    if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
+    send(res, status, shell(&quot;Visitor book&quot;, `&lt;h1&gt;Visitor book&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? `&lt;p&gt;This app is for people with the &lt;code&gt;${esc(STAFF_ROLE)}&lt;/code&gt; role. Ask whoever runs it to give it to you.&lt;/p&gt;` : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+  });
+});
+store.init().then(
+  () =&gt; server.listen({ port: PORT, host: LISTEN_ADDRESS }, () =&gt; console.log(`${APP_NAME} ${VERSION} listening on :${server.address().port} (visits kept in ${store.kind})`)),
+  (err) =&gt; {
+    // No fallback to memory: visits kept there would be lost at the next restart.
+    console.error(`${err.message}\nDATABASE_URL is set, so this app will not start without its database.`);
+    process.exit(1);
+  },
+);</code></pre>
+<p>It worked when both files parse. This prints nothing and exits 0:</p>
+<pre data-lang="bash"><code>node --check server.js &amp;&amp; node --check store.js</code></pre>
+<h2 id="5-match-the-files-to-the-new-roles-and-the-new-file-list">5. Match the files to the new roles and the new file list<a class="d-anchor" href="#5-match-the-files-to-the-new-roles-and-the-new-file-list" aria-label="Link to this section">#</a></h2>
+<p>Two small edits to files the starter already has. First, the pretend portal that <code>npm run dev</code> uses signs you in as <code>editor</code> with the starter&#39;s role. Give it yours:</p>
+<pre data-lang="diff"><code>--- a/dev/mock-portal.js
++++ b/dev/mock-portal.js
+@@ -18,7 +18,7 @@
+ // the role strings must be exactly what your server passes to requireRole.
+ const USERS = {
+   reader: { sub: &quot;usr_local_reader&quot;, email: &quot;reader@example.test&quot;, name: &quot;Riley Reader&quot;, kind: &quot;employee&quot;, groups: [], roles: [] },
+-  editor: { sub: &quot;usr_local_editor&quot;, email: &quot;editor@example.test&quot;, name: &quot;Eden Editor&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;starter.editor&quot;] },
++  editor: { sub: &quot;usr_local_editor&quot;, email: &quot;editor@example.test&quot;, name: &quot;Eden Editor&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;visitors.staff&quot;] },
+ };
+ 
+ async function startMockPortal({ port, appUrl, appId, as = &quot;editor&quot; }) {</code></pre>
+<p>Second, the <code>Dockerfile</code> copies the app&#39;s files into the image by name. <code>publish.js</code> is gone, so take it out of the list:</p>
+<pre data-lang="diff"><code>--- a/Dockerfile
++++ b/Dockerfile
+@@ -32,7 +32,7 @@
+ ENV BUILD_COMMIT=$BUILD_COMMIT
+ 
+ # Copy the app itself. Only what runs goes in: no tests, no dev tools.
+-COPY server.js publish.js store.js ./
++COPY server.js store.js ./
+ 
+ # A portal launch (no manifest.json) deploys to port 3000, fixed. If you use the
+ # Advanced path instead, this must match runtime.port in manifest.json.</code></pre>
+<p>It worked when <code>grep -c &#39;COPY server.js store.js&#39; Dockerfile</code> prints <code>1</code> and <code>grep -c &#39;visitors.staff&#39; dev/mock-portal.js</code> prints <code>1</code>.</p>
+<h2 id="6-replace-the-test">6. Replace the test<a class="d-anchor" href="#6-replace-the-test" aria-label="Link to this section">#</a></h2>
+<p>The starter&#39;s <code>npm test</code> checks the noticeboard, so it fails once <code>server.js</code> changes. Replace <code>test/smoke.js</code> with this. Every refused case has an accepted case beside it, so a check that can only ever refuse cannot pass by accident, and the run ends with a count.</p>
+<pre data-lang="js"><code>// test/smoke.js: `npm test`. Proves the visitor book refuses what it should and
+// accepts what it should. Every &quot;refused&quot; row has a matching &quot;accepted&quot; row, so a
+// check that can only ever refuse cannot pass by accident.
+const { spawn } = require(&quot;node:child_process&quot;);
+const http = require(&quot;node:http&quot;);
+const path = require(&quot;node:path&quot;);
+const { SignJWT } = require(&quot;jose&quot;);
+const { startMockPortal } = require(&quot;../dev/mock-portal&quot;);
+
+const APP_ID = &quot;app_smoke_test&quot;;
+const SERVER = path.join(__dirname, &quot;..&quot;, &quot;server.js&quot;);
+const children = [];
+let pass = 0, fail = 0;
+function check(name, got, want) {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? &quot;ok  &quot; : &quot;FAIL&quot;} ${name}${ok ? &quot;&quot; : `  (expected ${JSON.stringify(want)}, got ${JSON.stringify(got)})`}`);
+}
+
+function startApp(env) {
+  return new Promise((resolve) =&gt; {
+    const child = spawn(process.execPath, [SERVER], { env: { PATH: process.env.PATH, PORT: &quot;0&quot;, LISTEN_ADDRESS: &quot;127.0.0.1&quot;, ...env }, stdio: [&quot;ignore&quot;, &quot;pipe&quot;, &quot;pipe&quot;] });
+    children.push(child);
+    let out = &quot;&quot;;
+    const onData = (d) =&gt; {
+      out += d;
+      const m = out.match(/listening on :(\d+)/);
+      if (m) resolve({ child, url: `http://127.0.0.1:${m[1]}`, out: () =&gt; out });
+    };
+    child.stdout.on(&quot;data&quot;, onData); child.stderr.on(&quot;data&quot;, onData);
+    child.on(&quot;exit&quot;, (code) =&gt; resolve({ child, exited: code, out: () =&gt; out }));
+  });
+}
+
+function request(url, { method = &quot;GET&quot;, headers = {}, body } = {}) {
+  return new Promise((resolve, reject) =&gt; {
+    const req = http.request(url, { method, headers }, (res) =&gt; {
+      let data = &quot;&quot;; res.on(&quot;data&quot;, (d) =&gt; (data += d));
+      res.on(&quot;end&quot;, () =&gt; resolve({ status: res.statusCode, headers: res.headers, body: data, json: () =&gt; JSON.parse(data) }));
+    });
+    req.on(&quot;error&quot;, reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+(async () =&gt; {
+  // --- 1. It refuses to start without sign-in configured -------------------
+  const noAppId = await startApp({ VMNODES_PORTAL_URL: &quot;http://127.0.0.1:1&quot; });
+  check(&quot;refuses to START without VMNODES_APP_ID&quot;, noAppId.exited !== undefined &amp;&amp; noAppId.exited !== 0, true);
+
+  const portal = await startMockPortal({ port: 0, appId: APP_ID });
+  const app = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID });
+  check(&quot;CONTROL: starts when both settings are present&quot;, typeof app.url, &quot;string&quot;);
+  if (!app.url) { console.log(app.out()); process.exit(1); }
+  portal.setTarget(app.url);
+
+  const mint = (claims, { aud = APP_ID } = {}) =&gt;
+    new SignJWT({ email: &quot;e@example.test&quot;, name: &quot;Eden Editor&quot;, kind: &quot;employee&quot;, groups: [], roles: [], ...claims })
+      .setProtectedHeader({ alg: &quot;RS256&quot;, kid: &quot;local-dev&quot; }).setSubject(&quot;usr_1&quot;).setIssuer(portal.issuer).setAudience(aud)
+      .setIssuedAt().setExpirationTime(&quot;5m&quot;).sign(portal.privateKey);
+  const as = async (claims, opts) =&gt; ({ &quot;x-vmnodes-identity&quot;: await mint(claims, opts) });
+  const staff = () =&gt; as({ roles: [&quot;visitors.staff&quot;] });
+  const nobody = () =&gt; as({ name: &quot;Riley Reader&quot;, roles: [] });
+  const json = (headers, method, p, body) =&gt; request(`${app.url}${p}`, { method, headers: { ...headers, &quot;content-type&quot;: &quot;application/json&quot; }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+  // --- 2. Health and sign-in -------------------------------------------------
+  const h = await request(`${app.url}/health`);
+  check(&quot;health answers 200 WITHOUT sign-in&quot;, h.status, 200);
+  check(&quot;health says visits are kept in memory when DATABASE_URL is not set&quot;, h.json().storage, &quot;memory&quot;);
+  check(&quot;CONTROL: a staff token is accepted&quot;, (await json(await staff(), &quot;GET&quot;, &quot;/api/visits&quot;)).status, 200);
+  check(&quot;no identity header -&gt; 401&quot;, (await request(`${app.url}/api/visits`)).status, 401);
+  check(&quot;token meant for ANOTHER app -&gt; 401&quot;, (await json(await as({ roles: [&quot;visitors.staff&quot;] }, { aud: &quot;app_someone_else&quot; }), &quot;GET&quot;, &quot;/api/visits&quot;)).status, 401);
+
+  // --- 3. The role is checked on the server, for every route -----------------
+  check(&quot;signed in without the role: list -&gt; 403&quot;, (await json(await nobody(), &quot;GET&quot;, &quot;/api/visits&quot;)).status, 403);
+  check(&quot;signed in without the role: sign in a visitor -&gt; 403&quot;, (await json(await nobody(), &quot;POST&quot;, &quot;/api/visits&quot;, { visitor: &quot;A&quot;, visiting: &quot;B&quot; })).status, 403);
+  check(&quot;signed in without the role: sign out -&gt; 403&quot;, (await json(await nobody(), &quot;POST&quot;, &quot;/api/visits/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11/leave&quot;)).status, 403);
+
+  // --- 4. Adding and listing -------------------------------------------------
+  const made = await json(await staff(), &quot;POST&quot;, &quot;/api/visits&quot;, { visitor: &quot;Ada &lt;b&gt;Lovelace&lt;/b&gt;&quot;, company: &quot;Analytical Ltd&quot;, visiting: &quot;Grace&quot; });
+  check(&quot;CONTROL: a valid visit is accepted -&gt; 201&quot;, made.status, 201);
+  const list = (await json(await staff(), &quot;GET&quot;, &quot;/api/visits&quot;)).json().items;
+  check(&quot;the visit is in the list, with no left time&quot;, [list.length, list[0].visitor, list[0].leftAt], [1, &quot;Ada &lt;b&gt;Lovelace&lt;/b&gt;&quot;, null]);
+  for (const [name, body] of [[&quot;no visitor&quot;, { visiting: &quot;Grace&quot; }], [&quot;blank visitor&quot;, { visitor: &quot;   &quot;, visiting: &quot;Grace&quot; }], [&quot;no visiting&quot;, { visitor: &quot;Ada&quot; }], [&quot;a number for visitor&quot;, { visitor: 5, visiting: &quot;Grace&quot; }], [&quot;a 101-character visitor&quot;, { visitor: &quot;x&quot;.repeat(101), visiting: &quot;Grace&quot; }]]) {
+    check(`${name} -&gt; 400`, (await json(await staff(), &quot;POST&quot;, &quot;/api/visits&quot;, body)).status, 400);
+  }
+  const broken = await request(`${app.url}/api/visits`, { method: &quot;POST&quot;, headers: { ...(await staff()), &quot;content-type&quot;: &quot;application/json&quot; }, body: &quot;{nope&quot; });
+  check(&quot;a body that is not JSON -&gt; 400&quot;, broken.status, 400);
+  check(&quot;nothing was added by the refused posts&quot;, (await json(await staff(), &quot;GET&quot;, &quot;/api/visits&quot;)).json().items.length, 1);
+
+  // --- 5. Text is escaped when it goes into the page -------------------------
+  portal.setUser(&quot;editor&quot;);
+  const pageHtml = (await request(`${portal.issuer}/`)).body;
+  check(&quot;typed text is escaped, not run as markup&quot;, pageHtml.includes(&quot;Ada &amp;lt;b&amp;gt;Lovelace&amp;lt;/b&amp;gt;&quot;) &amp;&amp; !pageHtml.includes(&quot;&lt;b&gt;Lovelace&quot;), true);
+  portal.setUser(&quot;reader&quot;);
+  check(&quot;a person without the role gets a 403 page, not the list&quot;, [(await request(`${portal.issuer}/`)).status, (await request(`${portal.issuer}/`)).body.includes(&quot;Lovelace&quot;)], [403, false]);
+  portal.setUser(&quot;editor&quot;);
+
+  // --- 6. Signing out --------------------------------------------------------
+  const id = made.json().id;
+  const out = await json(await staff(), &quot;POST&quot;, `/api/visits/${id}/leave`);
+  check(&quot;CONTROL: signing out a visitor on site -&gt; 200, with a left time&quot;, [out.status, typeof out.json().leftAt], [200, &quot;string&quot;]);
+  check(&quot;signing out the same visitor again -&gt; 404&quot;, (await json(await staff(), &quot;POST&quot;, `/api/visits/${id}/leave`)).status, 404);
+  check(&quot;a made-up id -&gt; 404&quot;, (await json(await staff(), &quot;POST&quot;, &quot;/api/visits/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11/leave&quot;)).status, 404);
+  check(&quot;an id that is not a UUID -&gt; 404, not a database error&quot;, (await json(await staff(), &quot;POST&quot;, &quot;/api/visits/not-an-id/leave&quot;)).status, 404);
+
+  // --- 7. A database that cannot be reached stops the app; it never falls back --
+  const noDb = await startApp({ VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, DATABASE_URL: &quot;postgres://visitors@127.0.0.1:1/visitors&quot; });
+  check(&quot;with DATABASE_URL set and no database, the app refuses to START&quot;, noDb.exited !== undefined &amp;&amp; noDb.exited !== 0, true);
+  check(&quot;...and says it will not start without its database&quot;, /will not start without its database/.test(noDb.out()), true);
+
+  // --- 8. The count itself: zero checks run must never read as a pass ---------
+  const FLOOR = 25;
+  if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
+  console.log(`\npassed=${pass} failed=${fail}`);
+  finish(fail === 0 ? 0 : 1);
+})().catch((e) =&gt; { console.error(&quot;smoke test crashed:&quot;, e); finish(1); });
+
+function finish(code) {
+  for (const c of children) if (c.exitCode === null) c.kill();
+  process.exit(code);
+}</code></pre>
+<pre data-lang="bash"><code>npm test</code></pre>
+<p>It worked when the last line is <code>passed=27 failed=0</code>. A run that ends without a <code>passed=</code> line is broken plumbing, not a broken app: read the first line that starts <code>FAIL</code> or the error above it.</p>
+<h2 id="7-try-it-on-your-computer">7. Try it on your computer<a class="d-anchor" href="#7-try-it-on-your-computer" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npm run dev</code></pre>
+<p>It prints <code>Open http://127.0.0.1:4100 in your browser.</code> Open that address.</p>
+<p>It worked when the page is headed <strong>Visitor book</strong>, reads &quot;Signed in as Eden Editor&quot;, shows a form with <strong>Visitor&#39;s name</strong>, <strong>Company (optional)</strong> and <strong>Who are they here to see?</strong>, and a <strong>Sign in visitor</strong> button, and the table says &quot;Nobody has signed in yet.&quot; Fill the form in and press <strong>Sign in visitor</strong>: the visitor appears in the table with a <strong>Sign out</strong> button, and pressing it fills the <strong>Left</strong> column. The last line reads &quot;Visits are kept in memory, so they are cleared when the app restarts or is updated.&quot; because <code>npm run dev</code> sets no database.</p>
+<p>Now see what a person without the role sees. Open <code>http://127.0.0.1:4100/_as/reader</code>. It worked when the page reads &quot;role &#39;visitors.staff&#39; required&quot; and &quot;This app is for people with the <code>visitors.staff</code> role. Ask whoever runs it to give it to you.&quot; Open <code>http://127.0.0.1:4100/_as/editor</code> to sign back in. Stop the command with Ctrl+C.</p>
+<h2 id="8-put-it-online">8. Put it online<a class="d-anchor" href="#8-put-it-online" aria-label="Link to this section">#</a></h2>
+<p>Commit and push, then launch as <code>visitor-book</code>, following <a href="/getting-started">Getting started</a> steps 3 to 6.</p>
+<pre data-lang="bash"><code>git add -A
+git commit -m &quot;Visitor book&quot;
+git push</code></pre>
+<p>It worked when the launch page badge reads <strong>Working</strong>, a line reads &quot;You have every role visitor-book declares: visitors.staff.&quot;, and <strong>Open visitor-book</strong> opens <code>https://visitor-book.acme.vmnodes.com</code> with the heading <strong>Visitor book</strong> and the last line &quot;Visits are kept in this app&#39;s database, across restarts and updates.&quot;</p>
+<h2 id="9-give-reception-the-role">9. Give reception the role<a class="d-anchor" href="#9-give-reception-the-role" aria-label="Link to this section">#</a></h2>
+<p>Opening the app needs the role, and only you hold it. On the app&#39;s <strong>People</strong> tab press <strong>Change roles</strong> on each person who should use it, tick <code>visitors.staff</code> and press <strong>Save roles</strong>. It worked when their row lists <code>visitors.staff</code>. The person must already be a member of the org: there is no portal screen for adding one, so ask your VMnodes contact. See <a href="/reference/limits">Limits</a>.</p>
+<h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
+<p>Run these in order. Items 2 to 5 need <code>npm run dev</code> running in another terminal, started as the default user <code>editor</code>.</p>
+<ol><li><code>npm test</code> ends <code>passed=27 failed=0</code>.</li><li>Adding through the form answers <code>303</code>, and the entry is in the list:<pre data-lang="bash"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; -X POST -d &#39;visitor=Ada&amp;company=Analytical&amp;visiting=Grace&#39; http://127.0.0.1:4100/visits
+curl -s http://127.0.0.1:4100/api/visits</code></pre>
+<p>The first prints <code>303</code>. The second prints one item with <code>&quot;visitor&quot;:&quot;Ada&quot;</code> and <code>&quot;leftAt&quot;:null</code>.</p></li><li>The server refuses an empty name even when the form is bypassed. This prints <code>{&quot;error&quot;:&quot;visitor is required&quot;}</code>:<pre data-lang="bash"><code>curl -s -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;visitor&quot;:&quot;&quot;,&quot;visiting&quot;:&quot;Grace&quot;}&#39; http://127.0.0.1:4100/api/visits</code></pre></li><li>A request with no identity header is refused. Port 3000 is the app itself, with no portal in front. This prints <code>401</code>:<pre data-lang="bash"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:3000/api/visits</code></pre></li><li>A signed-in person without the role is refused, and signing back in lets them through:<pre data-lang="bash"><code>curl -s -o /dev/null http://127.0.0.1:4100/_as/reader
+curl -s http://127.0.0.1:4100/api/visits
+curl -s -o /dev/null http://127.0.0.1:4100/_as/editor
+curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:4100/api/visits</code></pre>
+<p>The second command prints <code>{&quot;error&quot;:&quot;role &#39;visitors.staff&#39; required&quot;}</code>. The last prints <code>200</code>.</p></li><li>After the launch, the live health check answers without sign-in and says where visits are kept:<pre data-lang="bash"><code>curl -s https://visitor-book.acme.vmnodes.com/health</code></pre>
+<p>It prints <code>&quot;status&quot;:&quot;ok&quot;</code> and <code>&quot;storage&quot;:&quot;postgres&quot;</code>. <code>&quot;storage&quot;:&quot;memory&quot;</code> means <code>&quot;database&quot;: true</code> did not reach the deployed commit.</p></li></ol>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>Hiding the form is not checking the role.</strong> Call <code>identity.requireRole</code> on the server for every route that reads or writes, as <code>server.js</code> does. A person without the role who sends a request directly gets through otherwise. Check 5 tests it.</li><li><strong>The role string must match in three places</strong>: <code>vmnodes.json</code>, <code>server.js</code> and <code>dev/mock-portal.js</code>. A role the code checks but <code>vmnodes.json</code> does not declare can never be given to anyone.</li><li><strong>An update does not give anyone a role the new commit adds.</strong> If you add a role later, give it with <strong>Change roles</strong>. See <a href="/concepts/roles">Roles</a>.</li><li><strong>Validate on the server.</strong> The form&#39;s <code>required</code> and <code>maxlength</code> are courtesy for people; anyone can send a request without the form. Check 3 tests it.</li><li><strong>Escape every typed value before it goes into a page.</strong> <code>server.js</code> passes each one through <code>esc()</code>. Without it a visitor named <code>&lt;b&gt;Ada&lt;/b&gt;</code> is run as markup.</li><li><strong>A fixed id in a URL can be anything.</strong> The leave route checks the id is a UUID before it reaches the database, so a made-up id answers 404 and not a database error.</li><li><strong>Do not fall back to memory.</strong> With <code>DATABASE_URL</code> set, an unreachable database must stop the app. A silent fallback loses every entry at the next restart. Without <code>&quot;database&quot;: true</code>, an update clears the data too. See <a href="/concepts/data">Data</a>.</li><li><strong>List every file the server loads in the <code>Dockerfile</code>&#39;s <code>COPY</code> line.</strong> A file you add and forget builds, then fails with &quot;Your app stopped while starting.&quot; A file you delete and leave in the list fails the build.</li><li><strong>Keep the app answering <code>/health</code> with no sign-in, and keep it on port 3000.</strong> The starter does both. See <a href="/concepts/apps">Apps</a>.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/roles">Roles</a></li><li><a href="/concepts/data">Data</a></li><li><a href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a href="/reference/vmnodes-json"><code>vmnodes.json</code></a></li></ul>
+  <p class="d-meta"><a href="/how-to/form-and-list.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#1-remove-what-this-app-does-not-use">1. Remove what this app does not use</a></li><li class="l2"><a href="#2-declare-one-role-and-a-database">2. Declare one role and a database</a></li><li class="l2"><a href="#3-replace-storejs">3. Replace store.js</a></li><li class="l2"><a href="#4-replace-serverjs">4. Replace server.js</a></li><li class="l2"><a href="#5-match-the-files-to-the-new-roles-and-the-new-file-list">5. Match the files to the new roles and the new file list</a></li><li class="l2"><a href="#6-replace-the-test">6. Replace the test</a></li><li class="l2"><a href="#7-try-it-on-your-computer">7. Try it on your computer</a></li><li class="l2"><a href="#8-put-it-online">8. Put it online</a></li><li class="l2"><a href="#9-give-reception-the-role">9. Give reception the role</a></li><li class="l2"><a href="#check-it-works">Check it works</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

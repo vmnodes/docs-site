@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Organisation · VMnodes docs</title>
+<meta name="description" content="Incidents record what went wrong and who is handling it. Extensions are third-party apps installed into the organisation; an upgrade that widens access waits for an administrator.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/organisation.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="organisation">Organisation</h1>
+<p>Incidents record what went wrong and who is handling it. Extensions are third-party apps installed into the organisation; an upgrade that widens access waits for an administrator.</p>
+<h2 id="list-extensions">List extensions<a class="d-anchor" href="#list-extensions" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/extensions</code></p>
+<p>Lists extensions installed in the organisation, with the access each one requested.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/extensions&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;extensionId&quot;: &quot;ext_0000000000000000000000000A&quot;,
+    &quot;name&quot;: &quot;visitor-book&quot;,
+    &quot;publisher&quot;: &quot;Example Software&quot;,
+    &quot;version&quot;: &quot;1.2.0&quot;,
+    &quot;status&quot;: &quot;installed&quot;,
+    &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+    &quot;requested&quot;: {
+      &quot;runtime&quot;: {
+        &quot;image&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+        &quot;resources&quot;: {
+          &quot;cpu&quot;: &quot;0.5&quot;,
+          &quot;memory&quot;: &quot;256Mi&quot;
+        }
+      },
+      &quot;publishes&quot;: [
+        &quot;visits.visit/v1&quot;
+      ],
+      &quot;consumes&quot;: [],
+      &quot;actions&quot;: [],
+      &quot;proposes&quot;: [],
+      &quot;permissionTemplates&quot;: [],
+      &quot;mail&quot;: {
+        &quot;send&quot;: false
+      },
+      &quot;directory&quot;: {
+        &quot;inviteCustomers&quot;: false,
+        &quot;lookupPeople&quot;: false,
+        &quot;listGroupMembers&quot;: false
+      },
+      &quot;ai&quot;: {
+        &quot;complete&quot;: false
+      }
+    },
+    &quot;detail&quot;: null
+  }
+]</code></pre>
+<p><code>requested.runtime.resources</code> holds optional <code>cpu</code>, <code>memory</code> and <code>storage</code> strings. <code>status</code> is the extension&#39;s install state.</p>
+<h2 id="list-pending-upgrades">List pending upgrades<a class="d-anchor" href="#list-pending-upgrades" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/extensions/upgrades/pending</code></p>
+<p>Lists extension upgrades waiting for an administrator. A caller who is not an administrator gets an empty list.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/extensions/upgrades/pending&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;pendingUpgradeId&quot;: &quot;pup_01JBX3KS8AVBBFNBP42W5TWSFP&quot;,
+    &quot;extensionId&quot;: &quot;ext_0000000000000000000000000A&quot;,
+    &quot;extensionName&quot;: &quot;visitor-book&quot;,
+    &quot;fromVersion&quot;: &quot;1.2.0&quot;,
+    &quot;toVersion&quot;: &quot;1.3.0&quot;,
+    &quot;widened&quot;: {
+      &quot;consumes&quot;: [
+        &quot;visits.visit&quot;
+      ],
+      &quot;publishes&quot;: [],
+      &quot;proposes&quot;: [],
+      &quot;permissions&quot;: [
+        &quot;mail.send&quot;
+      ],
+      &quot;actions&quot;: []
+    },
+    &quot;status&quot;: &quot;pending&quot;,
+    &quot;actionable&quot;: true,
+    &quot;blockedReason&quot;: null,
+    &quot;phase&quot;: null,
+    &quot;detail&quot;: null,
+    &quot;requestedBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+    &quot;requestedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+    &quot;decidedAt&quot;: null
+  }
+]</code></pre>
+<p><code>widened</code> lists only what the upgrade adds, in five lists: <code>consumes</code>, <code>publishes</code>, <code>proposes</code>, <code>permissions</code> and <code>actions</code>. An upgrade that adds nothing does not wait here. <code>status</code> is <code>pending</code> while it waits. <code>actionable</code> is false, with a <code>blockedReason</code>, when the upgrade cannot be approved as it stands.</p>
+<h2 id="approve-an-extension-upgrade">Approve an extension upgrade<a class="d-anchor" href="#approve-an-extension-upgrade" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/extensions/upgrades/{pendingId}/approve</code></p>
+<p>Approves a pending upgrade and installs it. Approving grants the app new access to the organisation&#39;s data, so only an administrator can.</p>
+<p><strong>Auth:</strong> administrator (portal session or API token).</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>pendingId</code></td><td>path</td><td>yes</td><td>The pending upgrade id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/extensions/upgrades/&lt;pendingId&gt;/approve&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;status&quot;: &quot;installed&quot;,
+  &quot;version&quot;: &quot;1.3.0&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>422</td><td><code>extensions/no-pending-upgrade</code></td><td><code>no such pending upgrade</code></td></tr><tr><td>422</td><td><code>extensions/approval-forbidden</code></td><td><code>approving an upgrade needs an organisation administrator, or an admin token. Approving grants an application new access to your data, so it is not a decision any member of the organisation can make.</code></td></tr></tbody></table></div>
+<p>Also returns 422 <code>extensions/upgrade-decided</code> when the upgrade was already decided and <code>extensions/upgrade-partial</code> when it only partly applied.</p>
+<h2 id="get-extension-usage">Get extension usage<a class="d-anchor" href="#get-extension-usage" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/extensions/{extId}/usage</code></p>
+<p>Returns what one extension has consumed: published records, publish runs, action executions, deployments and compute.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>extId</code></td><td>path</td><td>yes</td><td>The extension id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/extensions/&lt;extId&gt;/usage&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;extensionId&quot;: &quot;ext_0000000000000000000000000A&quot;,
+  &quot;name&quot;: &quot;visitor-book&quot;,
+  &quot;status&quot;: &quot;installed&quot;,
+  &quot;reserved&quot;: {
+    &quot;cpu&quot;: &quot;0.5&quot;,
+    &quot;memory&quot;: &quot;256Mi&quot;
+  },
+  &quot;publishedRecords&quot;: 1204,
+  &quot;publishRuns&quot;: 31,
+  &quot;actionExecutions&quot;: 8,
+  &quot;deployments&quot;: 3,
+  &quot;computeSampling&quot;: {
+    &quot;sampledAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+    &quot;services&quot;: [
+      {
+        &quot;serviceId&quot;: &quot;web&quot;,
+        &quot;status&quot;: &quot;running&quot;,
+        &quot;cpuPercent&quot;: 3.2,
+        &quot;memoryUsedMiB&quot;: 118
+      }
+    ]
+  }
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<p><code>reserved</code> is what the extension&#39;s manifest reserves. <code>computeSampling</code> is the latest sample from the host, or the string <code>not-collected</code> when none exists.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/organisation.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#list-extensions">List extensions</a></li><li class="l2"><a href="#list-pending-upgrades">List pending upgrades</a></li><li class="l2"><a href="#approve-an-extension-upgrade">Approve an extension upgrade</a></li><li class="l2"><a href="#get-extension-usage">Get extension usage</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

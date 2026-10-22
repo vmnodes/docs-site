@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading shared data · VMnodes docs</title>
+<meta name="description" content="Discover, describe and query the entities other apps share, ask a question in plain language, and pin the answers as charts. What a caller sees is decided by data grants, not by the request. An entity with no grant for the caller is invisible. Grants are created by an organisation administrator: ask your VMnodes contact. Ask your VMnodes contact for an API token.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/reading.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="reading-shared-data">Reading shared data</h1>
+<p>Discover, describe and query the entities other apps share, ask a question in plain language, and pin the answers as charts. What a caller sees is decided by data grants, not by the request. An entity with no grant for the caller is invisible. Grants are created by an organisation administrator: ask your VMnodes contact. Ask your VMnodes contact for an API token.</p>
+<h2 id="list-entities">List entities<a class="d-anchor" href="#list-entities" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/data/entities</code></p>
+<p>Lists the shared entities the caller can discover, with the fields the caller may see and the actions the caller holds. An entity the caller can discover but not read carries a <code>note</code>.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/data/entities&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;entity&quot;: &quot;quotes.quote&quot;,
+    &quot;version&quot;: 1,
+    &quot;description&quot;: &quot;A quote sent to a customer&quot;,
+    &quot;classification&quot;: &quot;internal&quot;,
+    &quot;actions&quot;: [
+      &quot;discover&quot;,
+      &quot;read&quot;,
+      &quot;query&quot;,
+      &quot;aggregate&quot;
+    ],
+    &quot;fields&quot;: [
+      {
+        &quot;name&quot;: &quot;quoteNumber&quot;,
+        &quot;type&quot;: &quot;string&quot;
+      },
+      {
+        &quot;name&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;string&quot;
+      },
+      {
+        &quot;name&quot;: &quot;total&quot;,
+        &quot;type&quot;: &quot;number&quot;
+      },
+      {
+        &quot;name&quot;: &quot;sentAt&quot;,
+        &quot;type&quot;: &quot;timestamp&quot;
+      }
+    ],
+    &quot;retired&quot;: false
+  },
+  {
+    &quot;entity&quot;: &quot;visits.visit&quot;,
+    &quot;version&quot;: 1,
+    &quot;description&quot;: &quot;A visitor sign-in&quot;,
+    &quot;classification&quot;: &quot;internal&quot;,
+    &quot;actions&quot;: [
+      &quot;discover&quot;
+    ],
+    &quot;fields&quot;: [],
+    &quot;retired&quot;: false,
+    &quot;note&quot;: &quot;You can see this exists. Ask its owner for access to read it.&quot;
+  }
+]</code></pre>
+<p>An app&#39;s own token works here and sees only what its grants allow. <code>retired</code> is true once the owner stops sharing the entity.</p>
+<h2 id="describe-an-entity">Describe an entity<a class="d-anchor" href="#describe-an-entity" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/data/entities/{entity}</code></p>
+<p>Returns one entity&#39;s definition: version, description, classification, source and the fields the caller may see.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>entity</code></td><td>path</td><td>yes</td><td>The entity name, <code>&lt;appName&gt;.&lt;local&gt;</code>, for example <code>quotes.quote</code>.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/data/entities/&lt;entity&gt;&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;quotes.quote&quot;,
+  &quot;version&quot;: 1,
+  &quot;description&quot;: &quot;A quote sent to a customer&quot;,
+  &quot;classification&quot;: &quot;internal&quot;,
+  &quot;source&quot;: &quot;quotes&quot;,
+  &quot;vmnodesOwned&quot;: false,
+  &quot;fields&quot;: [
+    {
+      &quot;name&quot;: &quot;quoteNumber&quot;,
+      &quot;type&quot;: &quot;string&quot;
+    },
+    {
+      &quot;name&quot;: &quot;customer&quot;,
+      &quot;type&quot;: &quot;string&quot;
+    },
+    {
+      &quot;name&quot;: &quot;total&quot;,
+      &quot;type&quot;: &quot;number&quot;
+    },
+    {
+      &quot;name&quot;: &quot;sentAt&quot;,
+      &quot;type&quot;: &quot;timestamp&quot;
+    }
+  ],
+  &quot;retired&quot;: false
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<p>An unknown entity and an entity the caller has no grant for answer identically with 404.</p>
+<h2 id="query-an-entity">Query an entity<a class="d-anchor" href="#query-an-entity" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/data/query</code></p>
+<p>Runs one governed query. Name the fields to return in <code>select</code>. Filters are ANDed. Add <code>aggregate</code> to count, sum, min or max, optionally grouped. Each row carries <code>_provenance</code>, and the response says how fresh the data is and whether it was cut short.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/data/query&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;entity&quot;:&quot;quotes.quote&quot;,&quot;select&quot;:[&quot;quoteNumber&quot;,&quot;customer&quot;,&quot;total&quot;],&quot;filter&quot;:[{&quot;field&quot;:&quot;total&quot;,&quot;op&quot;:&quot;gte&quot;,&quot;value&quot;:1000}],&quot;orderBy&quot;:{&quot;field&quot;:&quot;total&quot;,&quot;dir&quot;:&quot;desc&quot;},&quot;limit&quot;:2}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;entity&quot;: &quot;quotes.quote&quot;,
+  &quot;select&quot;: [
+    &quot;quoteNumber&quot;,
+    &quot;customer&quot;,
+    &quot;total&quot;
+  ],
+  &quot;filter&quot;: [
+    {
+      &quot;field&quot;: &quot;total&quot;,
+      &quot;op&quot;: &quot;gte&quot;,
+      &quot;value&quot;: 1000
+    }
+  ],
+  &quot;orderBy&quot;: {
+    &quot;field&quot;: &quot;total&quot;,
+    &quot;dir&quot;: &quot;desc&quot;
+  },
+  &quot;limit&quot;: 2
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;rows&quot;: [
+    {
+      &quot;quoteNumber&quot;: &quot;Q-1042&quot;,
+      &quot;customer&quot;: &quot;Example Pty Ltd&quot;,
+      &quot;total&quot;: 1850,
+      &quot;_provenance&quot;: {
+        &quot;sourceRef&quot;: &quot;5d41402abc4b2a76b9719d911017c592e2b7a0c3f4d6e8a1b9c0d2e4f6a8b0c1&quot;,
+        &quot;lastSeenAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+      }
+    }
+  ],
+  &quot;provenance&quot;: {
+    &quot;entity&quot;: &quot;quotes.quote/v1&quot;,
+    &quot;source&quot;: &quot;quotes&quot;,
+    &quot;freshestAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+    &quot;stalestAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+  },
+  &quot;truncated&quot;: false,
+  &quot;truncation&quot;: &quot;none&quot;,
+  &quot;rowCount&quot;: 1
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>422</td><td><code>data/denied</code></td><td><code>no query access to &#39;&lt;entity&gt;&#39;</code></td></tr><tr><td>422</td><td><code>data/field-denied</code></td><td><code>field &#39;&lt;field&gt;&#39; is not available to you on &#39;&lt;entity&gt;&#39;</code></td></tr><tr><td>422</td><td><code>data/grain-not-readable</code></td><td><code>rows of &#39;&lt;entity&gt;&#39; are identified by &lt;grain&gt;, and &lt;hidden&gt; &lt;is|are&gt; not available to you — two rows could differ in a way you cannot see. Aggregate instead (count, sum, min, max), which needs no row identity.</code></td></tr><tr><td>422</td><td><code>data/bad-op</code></td><td><code>unknown operator &#39;&lt;op&gt;&#39;</code></td></tr><tr><td>422</td><td><code>data/no-select</code></td><td><code>select is required — select at least one field</code></td></tr><tr><td>422</td><td><code>data/bad-entity</code></td><td><code>entity is required and must be a string</code></td></tr><tr><td>422</td><td><code>data/bad-select</code></td><td><code>select must be an array of field names</code></td></tr><tr><td>422</td><td><code>data/bad-filter</code></td><td><code>&#39;in&#39; needs 1-100 values</code></td></tr><tr><td>422</td><td><code>data/bad-order-by</code></td><td><code>orderBy.dir must be &#39;asc&#39; or &#39;desc&#39; when given</code></td></tr><tr><td>422</td><td><code>data/bad-aggregate</code></td><td><code>aggregate.fn must be one of count, sum, min, max</code></td></tr><tr><td>422</td><td><code>data/bad-limit</code></td><td><code>limit must be a positive integer</code></td></tr><tr><td>403</td><td><code>auth/on-behalf-of-not-permitted</code></td><td><code>only an application may act on behalf of a user</code></td></tr></tbody></table></div>
+<p><code>filter[].op</code> is one of <code>eq</code>, <code>ne</code>, <code>in</code> (1 to 100 values), <code>gt</code>, <code>gte</code>, <code>lt</code>, <code>lte</code>, <code>contains</code>. <code>limit</code> defaults to 50 and is at most 200. <code>orderBy.dir</code> defaults to ascending. <code>aggregate</code> is <code>{fn, field?, groupBy?, buckets?}</code> with <code>fn</code> one of <code>count</code>, <code>sum</code>, <code>min</code>, <code>max</code>; a grouped aggregate returns rows such as <code>{&quot;customer&quot;:&quot;Example Pty Ltd&quot;,&quot;sum&quot;:1850}</code> and caps at 200 groups. <code>truncation</code> is <code>none</code>, <code>groups</code> or <code>scan</code>. <code>withheld</code> appears when the caller&#39;s grant hides fields or rows. Where the message above shows one example, the same code has sibling messages that name the field or operator at fault: <code>data/denied</code> also reads <code>no aggregate access to &#39;&lt;entity&gt;&#39;</code> for an aggregate; <code>data/no-select</code> also reads <code>select at least one field</code>; <code>data/bad-filter</code> also covers a <code>filter</code> that is not an array, an entry that is not an object, and an entry missing <code>field</code>, <code>op</code> or <code>value</code>; <code>data/bad-aggregate</code> also covers <code>aggregate</code> that is not an object, a <code>field</code> that is not a string, a <code>groupBy</code> that is not an array and <code>buckets</code> that are not <code>day</code>, <code>month</code> or <code>year</code>. An unknown entity, an entity with no grant and an entity with no shared fields all answer with the same <code>data/denied</code>, on purpose. An app can read for a signed-in person by sending that person&#39;s gateway identity token in the <code>X-Vmnodes-On-Behalf-Of</code> header; the query then runs with that person&#39;s access, and a token that is not valid for the app returns 403 <code>identity/on-behalf-of-invalid</code> with the message <code>identity token not valid for this application: &lt;jose error&gt;</code>. Only an app&#39;s own token may send the header. The <code>sourceRef</code> is an opaque value for this reader: do not parse it.</p>
+<h2 id="ask-a-question">Ask a question<a class="d-anchor" href="#ask-a-question" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/data/ask</code></p>
+<p>Asks one business question in plain language. The platform plans a constrained query from the caller&#39;s grants, runs it through the governed data path, and returns a cited answer with the exact plan that ran.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/data/ask&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;question&quot;:&quot;What is the total value of quotes sent this month, by customer?&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;question&quot;: &quot;What is the total value of quotes sent this month, by customer?&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;answer&quot;: &quot;Example Pty Ltd has 1850 in quotes this month; Sample Co has 420.5.&quot;,
+  &quot;queries&quot;: [
+    {
+      &quot;plan&quot;: {
+        &quot;entity&quot;: &quot;quotes.quote&quot;,
+        &quot;select&quot;: [
+          &quot;customer&quot;
+        ],
+        &quot;aggregate&quot;: {
+          &quot;fn&quot;: &quot;sum&quot;,
+          &quot;field&quot;: &quot;total&quot;,
+          &quot;groupBy&quot;: [
+            &quot;customer&quot;
+          ]
+        }
+      },
+      &quot;rows&quot;: [
+        {
+          &quot;customer&quot;: &quot;Example Pty Ltd&quot;,
+          &quot;sum&quot;: 1850
+        },
+        {
+          &quot;customer&quot;: &quot;Sample Co&quot;,
+          &quot;sum&quot;: 420.5
+        }
+      ],
+      &quot;provenance&quot;: {
+        &quot;entity&quot;: &quot;quotes.quote/v1&quot;,
+        &quot;source&quot;: &quot;quotes&quot;,
+        &quot;freshestAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+        &quot;stalestAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+      },
+      &quot;rowCount&quot;: 2,
+      &quot;truncated&quot;: false,
+      &quot;truncation&quot;: &quot;none&quot;
+    }
+  ],
+  &quot;plan&quot;: {
+    &quot;entity&quot;: &quot;quotes.quote&quot;,
+    &quot;select&quot;: [
+      &quot;customer&quot;
+    ],
+    &quot;aggregate&quot;: {
+      &quot;fn&quot;: &quot;sum&quot;,
+      &quot;field&quot;: &quot;total&quot;,
+      &quot;groupBy&quot;: [
+        &quot;customer&quot;
+      ]
+    }
+  },
+  &quot;rows&quot;: [
+    {
+      &quot;customer&quot;: &quot;Example Pty Ltd&quot;,
+      &quot;sum&quot;: 1850
+    },
+    {
+      &quot;customer&quot;: &quot;Sample Co&quot;,
+      &quot;sum&quot;: 420.5
+    }
+  ],
+  &quot;provenance&quot;: {
+    &quot;entity&quot;: &quot;quotes.quote/v1&quot;,
+    &quot;source&quot;: &quot;quotes&quot;,
+    &quot;freshestAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+    &quot;stalestAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+  },
+  &quot;truncated&quot;: false,
+  &quot;rowCount&quot;: 2,
+  &quot;model&quot;: &quot;example-model&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>501</td><td><code>ask/not-configured</code></td><td><code>natural-language queries are not configured on this control plane</code></td></tr></tbody></table></div>
+<p><code>answer</code> is model-written, so the example answer is illustrative; the numbers come from <code>rows</code>. <code>queries</code> holds every query that ran, one per entity, because a question across two entities needs one query each. <code>plan</code>, <code>rows</code>, <code>provenance</code>, <code>truncated</code>, <code>truncation</code> and <code>rowCount</code> repeat the first query flat. <code>requestedChart</code> and <code>proposals</code> appear only when the question asked for a chart or for something to happen. Response shape not yet documented for <code>proposals</code> and <code>requestedChart</code>. A proposal is a request awaiting approval: nothing has happened until a person approves it. <code>question</code> is 1 to 2000 characters. Other 422 codes: <code>ask/bad-question</code>, <code>ask/no-data-access</code>, <code>ask/model-failed</code>, <code>ask/too-many-queries</code>, <code>ask/bad-plan</code>. A portal session may also call this route.</p>
+<h2 id="list-pinned-charts">List pinned charts<a class="d-anchor" href="#list-pinned-charts" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/data/pins</code></p>
+<p>Lists the caller&#39;s pinned charts, each re-run now as the caller, so a chart never shows more than the caller may see.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/data/pins&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;pins&quot;: [
+    {
+      &quot;id&quot;: &quot;pin_01JBX3G8NNBHKBVKS3CEH95TW0&quot;,
+      &quot;title&quot;: &quot;Quote value by customer&quot;,
+      &quot;question&quot;: &quot;What is the total value of quotes by customer?&quot;,
+      &quot;plan&quot;: {
+        &quot;entity&quot;: &quot;quotes.quote&quot;,
+        &quot;select&quot;: [
+          &quot;customer&quot;
+        ],
+        &quot;aggregate&quot;: {
+          &quot;fn&quot;: &quot;sum&quot;,
+          &quot;field&quot;: &quot;total&quot;,
+          &quot;groupBy&quot;: [
+            &quot;customer&quot;
+          ]
+        }
+      },
+      &quot;chartKind&quot;: &quot;bars&quot;,
+      &quot;position&quot;: 0,
+      &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+      &quot;rows&quot;: [
+        {
+          &quot;customer&quot;: &quot;Example Pty Ltd&quot;,
+          &quot;sum&quot;: 1850
+        }
+      ],
+      &quot;rowCount&quot;: 1,
+      &quot;truncated&quot;: false,
+      &quot;truncation&quot;: &quot;none&quot;,
+      &quot;provenance&quot;: {
+        &quot;entity&quot;: &quot;quotes.quote/v1&quot;,
+        &quot;source&quot;: &quot;quotes&quot;,
+        &quot;freshestAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+        &quot;stalestAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+      },
+      &quot;unavailable&quot;: false
+    }
+  ]
+}</code></pre>
+<p>Pins belong to one user. <code>unavailable</code> is true when the caller can no longer read the data behind a chart. A portal session may also call this route.</p>
+<h2 id="pin-a-chart">Pin a chart<a class="d-anchor" href="#pin-a-chart" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/data/pins</code></p>
+<p>Saves a grouped aggregate as a chart on the caller&#39;s dashboard. The <code>plan</code> is the plan returned by the ask call.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/data/pins&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;title&quot;:&quot;Quote value by customer&quot;,&quot;question&quot;:&quot;What is the total value of quotes by customer?&quot;,&quot;plan&quot;:{&quot;entity&quot;:&quot;quotes.quote&quot;,&quot;select&quot;:[&quot;customer&quot;],&quot;aggregate&quot;:{&quot;fn&quot;:&quot;sum&quot;,&quot;field&quot;:&quot;total&quot;,&quot;groupBy&quot;:[&quot;customer&quot;]}},&quot;chartKind&quot;:&quot;bars&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;title&quot;: &quot;Quote value by customer&quot;,
+  &quot;question&quot;: &quot;What is the total value of quotes by customer?&quot;,
+  &quot;plan&quot;: {
+    &quot;entity&quot;: &quot;quotes.quote&quot;,
+    &quot;select&quot;: [
+      &quot;customer&quot;
+    ],
+    &quot;aggregate&quot;: {
+      &quot;fn&quot;: &quot;sum&quot;,
+      &quot;field&quot;: &quot;total&quot;,
+      &quot;groupBy&quot;: [
+        &quot;customer&quot;
+      ]
+    }
+  },
+  &quot;chartKind&quot;: &quot;bars&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;pin_01JBX3G8NNBHKBVKS3CEH95TW0&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>422</td><td><code>pins/no-question</code></td><td><code>a pin needs the question it answers</code></td></tr><tr><td>422</td><td><code>pins/not-chartable</code></td><td><code>only a grouped aggregate can be pinned as a chart</code></td></tr><tr><td>422</td><td><code>pins/full</code></td><td><code>a dashboard holds 24 charts — remove one first</code></td></tr></tbody></table></div>
+<p><code>title</code> is optional and is cut to 120 characters. <code>chartKind</code> is optional and uses the chart names the ask call reports in <code>requestedChart</code>: <code>bars</code>, <code>stacked</code>, <code>grouped</code>, <code>line</code>, <code>pie</code> or <code>radar</code>. A user holds at most 24 pins. A portal session may also call this route.</p>
+<h2 id="remove-a-pinned-chart">Remove a pinned chart<a class="d-anchor" href="#remove-a-pinned-chart" aria-label="Link to this section">#</a></h2>
+<p><code>DELETE /v1/data/pins/{id}</code></p>
+<p>Removes one of the caller&#39;s pinned charts.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>id</code></td><td>path</td><td>yes</td><td>The pin id, from the list of pinned charts.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X DELETE &quot;$VMNODES_API_URL/v1/data/pins/&lt;id&gt;&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;removed&quot;: true
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>pins/not-found</code></td><td><code>no such pinned chart</code></td></tr></tbody></table></div>
+<p>A portal session may also call this route.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/reading.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#list-entities">List entities</a></li><li class="l2"><a href="#describe-an-entity">Describe an entity</a></li><li class="l2"><a href="#query-an-entity">Query an entity</a></li><li class="l2"><a href="#ask-a-question">Ask a question</a></li><li class="l2"><a href="#list-pinned-charts">List pinned charts</a></li><li class="l2"><a href="#pin-a-chart">Pin a chart</a></li><li class="l2"><a href="#remove-a-pinned-chart">Remove a pinned chart</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

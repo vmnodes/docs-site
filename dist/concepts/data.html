@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data · VMnodes docs</title>
+<meta name="description" content="Understand where an app&#39;s data lives, which of it survives an update, and how to ask VMnodes for a database. Read this before your app stores anything it cannot afford to lose.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/concepts/data.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data" aria-current="page">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="data">Data</h1>
+<p>Understand where an app&#39;s data lives, which of it survives an update, and how to ask VMnodes for a database. Read this before your app stores anything it cannot afford to lose.</p>
+<h2 id="three-places-data-can-be">Three places data can be<a class="d-anchor" href="#three-places-data-can-be" aria-label="Link to this section">#</a></h2>
+<div class="d-table"><table><thead><tr><th scope="col">Where</th><th scope="col">Survives an update or restart?</th><th scope="col">Who can read it</th></tr></thead><tbody><tr><td>Memory or the container&#39;s own disk</td><td>No. An update replaces the container, and a restart empties memory</td><td>Your app</td></tr><tr><td>The app&#39;s database</td><td>Yes</td><td>Your app only</td></tr><tr><td>Shared records, a curated copy you publish</td><td>Yes, as long as your app publishes them</td><td>Other apps in the org, field by field, as an administrator decides. See <a href="/concepts/sharing">Sharing</a></td></tr></tbody></table></div>
+<p>Private application data is kept separate from shared business data. Other apps cannot read your database, and that is deliberate. Share a curated copy instead.</p>
+<h2 id="ask-for-a-database">Ask for a database<a class="d-anchor" href="#ask-for-a-database" aria-label="Link to this section">#</a></h2>
+<p>Say so in <code>vmnodes.json</code>:</p>
+<pre data-lang="json"><code>{
+  &quot;apiVersion&quot;: &quot;vmnodes.com/v1&quot;,
+  &quot;roles&quot;: [
+    {
+      &quot;name&quot;: &quot;starter.editor&quot;,
+      &quot;description&quot;: &quot;Can post and edit messages.&quot;
+    }
+  ],
+  &quot;database&quot;: true,
+  &quot;publishes&quot;: [&quot;note/v1&quot;]
+}</code></pre>
+<p>When VMnodes deploys a commit with <code>&quot;database&quot;: true</code>, it creates the app&#39;s own PostgreSQL database first, waits until it is ready, and only then starts your app with <code>DATABASE_URL</code> set to a full connection string. You do not create the database by hand and you do not copy the connection string anywhere. VMnodes does not create tables for you: your app creates its own, as the starter&#39;s <code>store.js</code> does when it starts.</p>
+<p>If the database cannot be set up, nothing is started and any version already running keeps running. Try again.</p>
+<h2 id="read-databaseurl">Read <code>DATABASE_URL</code><a class="d-anchor" href="#read-databaseurl" aria-label="Link to this section">#</a></h2>
+<p>The starter decides where notes live in one place, from <code>DATABASE_URL</code>:</p>
+<pre data-lang="js"><code>function storageFor(env) {
+  return env.DATABASE_URL
+    ? { kind: &quot;postgres&quot;, publishMode: &quot;snapshot&quot; }
+    : { kind: &quot;memory&quot;, publishMode: &quot;upsert&quot; };
+}</code></pre>
+<p><code>/health</code> reports which one is running as <code>&quot;storage&quot;: &quot;postgres&quot;</code> or <code>&quot;storage&quot;: &quot;memory&quot;</code>, and the app&#39;s page says so in its last line.</p>
+<p>Two rules keep data safe:</p>
+<ul><li><strong>No quiet fallback.</strong> If <code>DATABASE_URL</code> is set but the database cannot be reached, the starter refuses to start. Falling back to memory would lose every note at the next restart.</li><li><strong>Locally there is no database.</strong> <code>npm run dev</code> sets no <code>DATABASE_URL</code>, so the starter keeps notes in memory. To try the database on your computer, set <code>DATABASE_URL</code> to a Postgres database of your own.</li></ul>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<blockquote><p><strong>Trap:</strong> without <code>&quot;database&quot;: true</code>, an update clears your data. The <strong>Deployment</strong> card warns &quot;Updating replaces your app&#39;s container. Anything not saved in its database is cleared.&quot; before you press <strong>Update to latest commit</strong>. Anything the app wrote to its own disk or kept in memory is gone, not only the notes. Put <code>&quot;database&quot;: true</code> in <code>vmnodes.json</code> and keep the data in the database before the first update.</p></blockquote>
+<blockquote><p><strong>Trap:</strong> adding <code>&quot;database&quot;: true</code> in a later commit takes effect at the next deploy, and nothing the app held in memory or on its disk before then is carried into it. Decide before the app holds data you care about.</p></blockquote>
+<blockquote><p><strong>Trap:</strong> removing <code>&quot;database&quot;</code> from <code>vmnodes.json</code> does not delete the database. The app keeps it, and the <strong>Deployment</strong> card says &quot;This app still has its database, and keeps it, although vmnodes.json no longer asks for one.&quot; A file edit is never what deletes your data.</p></blockquote>
+<blockquote><p><strong>Trap:</strong> <code>snapshot</code> publishing treats each batch as everything you have, and deletes shared records missing from it. Publish with <code>snapshot</code> only when the list is read from the database. The starter picks the mode in <code>storageFor</code> so the two cannot drift. See <a href="/concepts/sharing">Sharing</a>.</p></blockquote>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a href="/reference/vmnodes-json"><code>vmnodes.json</code></a></li><li><a href="/concepts/sharing">Sharing</a></li><li><a href="/concepts/apps">Apps</a></li></ul>
+  <p class="d-meta"><a href="/concepts/data.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#three-places-data-can-be">Three places data can be</a></li><li class="l2"><a href="#ask-for-a-database">Ask for a database</a></li><li class="l2"><a href="#read-databaseurl">Read DATABASEURL</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

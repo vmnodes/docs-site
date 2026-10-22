@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Identity SDK · VMnodes docs</title>
+<meta name="description" content="@vmnodes/identity checks the signed identity token the gateway adds to every request and gives your app a user object with roles. Read this page to install it, call it, handle its errors, or check the token yourself in a language that has no SDK.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/reference/identity-sdk.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk" aria-current="page">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="identity-sdk">Identity SDK</h1>
+<p><code>@vmnodes/identity</code> checks the signed identity token the gateway adds to every request and gives your app a user object with roles. Read this page to install it, call it, handle its errors, or check the token yourself in a language that has no SDK.</p>
+<h2 id="get-the-package">Get the package<a class="d-anchor" href="#get-the-package" aria-label="Link to this section">#</a></h2>
+<p>The package is not on npm yet. Get it from the starter&#39;s <code>vendor/</code> folder, or download <code>https://docs.vmnodes.com/downloads/vmnodes-identity-0.1.0.tgz</code>, and install it by path:</p>
+<pre data-lang="bash"><code>mkdir -p vendor
+cp vmnodes-identity-0.1.0.tgz vendor/
+npm install ./vendor/vmnodes-identity-0.1.0.tgz</code></pre>
+<p><code>package.json</code> now has <code>&quot;@vmnodes/identity&quot;: &quot;file:vendor/vmnodes-identity-0.1.0.tgz&quot;</code> and <code>package-lock.json</code> pins the file&#39;s hash. Commit <code>vendor/</code> and <code>package-lock.json</code> together.</p>
+<p>The build must have <code>vendor/</code> before it installs. Your <code>Dockerfile</code> copies it first:</p>
+<pre data-lang="dockerfile"><code>COPY package.json package-lock.json ./
+COPY vendor ./vendor
+RUN npm ci --omit=dev</code></pre>
+<p>Without a <code>Dockerfile</code> the platform&#39;s Node build copies only <code>package.json</code> and <code>package-lock.json</code> before installing. See <a href="/reference/build-and-run#node-without-a-dockerfile">Build, run and security checks</a>.</p>
+<p>The package needs Node 20 or later, ships CommonJS and ES module builds with TypeScript types, and depends on <code>jose</code> (<code>^5.9.0</code>).</p>
+<h2 id="use-it">Use it<a class="d-anchor" href="#use-it" aria-label="Link to this section">#</a></h2>
+<p>A complete app that reads the signed-in person and checks a role:</p>
+<pre data-lang="js"><code>const http = require(&quot;node:http&quot;);
+const { VmnodesIdentity, IdentityError } = require(&quot;@vmnodes/identity&quot;);
+
+// Reads VMNODES_PORTAL_URL, VMNODES_ISSUER_URL and VMNODES_APP_ID. Throws at start-up if they are missing.
+const identity = new VmnodesIdentity();
+
+const server = http.createServer(async (req, res) =&gt; {
+  try {
+    if (req.url === &quot;/health&quot;) {
+      res.writeHead(200, { &quot;content-type&quot;: &quot;application/json&quot; });
+      return res.end(JSON.stringify({ status: &quot;ok&quot; }));   // no sign-in: the platform calls this directly
+    }
+    const user = await identity.currentUser(req.headers);   // throws IdentityError 401 or 503
+    if (req.method === &quot;POST&quot;) identity.requireRole(user, &quot;expenses.approver&quot;); // throws IdentityError 403
+    res.writeHead(200, { &quot;content-type&quot;: &quot;application/json&quot; });
+    res.end(JSON.stringify({ hello: user.name || user.email, roles: user.roles }));
+  } catch (err) {
+    const status = err instanceof IdentityError ? err.status : 500;
+    res.writeHead(status, { &quot;content-type&quot;: &quot;application/json&quot; });
+    res.end(JSON.stringify({ error: status === 500 ? &quot;something went wrong&quot; : err.message }));
+  }
+});
+server.listen(3000, &quot;0.0.0.0&quot;);</code></pre>
+<p>To try it on your machine with a stand-in sign-in, see <a href="#local-development">Local development</a>. Online, a request from a signed-in person reaches your app with the header; the gateway answers a request from anyone else itself.</p>
+<h3 id="constructor">Constructor<a class="d-anchor" href="#constructor" aria-label="Link to this section">#</a></h3>
+<pre data-lang="js"><code>new VmnodesIdentity(portalUrl?, appId?, issuerUrl?)</code></pre>
+<p>With no arguments the constructor reads <code>VMNODES_PORTAL_URL</code>, <code>VMNODES_APP_ID</code> and <code>VMNODES_ISSUER_URL</code> from the environment; an argument overrides its variable. It fetches the key set from <code>&lt;issuer&gt;/auth/jwks</code>, where the issuer is <code>issuerUrl</code>, or else <code>VMNODES_ISSUER_URL</code>, or else the portal URL. See <a href="/reference/environment">Environment variables</a>.</p>
+<p>It throws at construction in two cases:</p>
+<ul><li><code>VMNODES_ISSUER_URL or VMNODES_PORTAL_URL is required (set by the platform)</code></li><li><code>VMNODES_APP_ID is required (set by the platform at install). Without it the audience check is not merely skipped — no `aud` claim is required at all, so another application&#39;s identity token on this same portal would verify here.</code></li></ul>
+<p>Let it stop the app. Do not catch it and carry on.</p>
+<h3 id="methods">Methods<a class="d-anchor" href="#methods" aria-label="Link to this section">#</a></h3>
+<div class="d-table"><table><thead><tr><th scope="col">Call</th><th scope="col">Returns or throws</th></tr></thead><tbody><tr><td><code>await identity.currentUser(headers)</code></td><td>The user object. <code>headers</code> is the lowercase-keyed headers object of the request, such as <code>req.headers</code>. It reads <code>x-vmnodes-identity</code>, using the first value if there are several.</td></tr><tr><td><code>identity.requireRole(user, role)</code></td><td>Nothing, or throws <code>IdentityError</code> 403.</td></tr><tr><td><code>identity.requireGroup(user, group)</code></td><td>Nothing, or throws 403. Matches a group by name.</td></tr><tr><td><code>identity.requireGroupId(user, groupId)</code></td><td>Nothing, or throws 403. Matches a group by id.</td></tr></tbody></table></div>
+<p>Check roles on the server for every action that changes something. Hiding a button is not a check.</p>
+<h3 id="the-user-object">The user object<a class="d-anchor" href="#the-user-object" aria-label="Link to this section">#</a></h3>
+<div class="d-table"><table><thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>id</code></td><td>string</td><td>The person&#39;s id. Opaque: store it as it is.</td></tr><tr><td><code>email</code></td><td>string</td><td>Their email address.</td></tr><tr><td><code>name</code></td><td>string</td><td>Their display name. It can be empty; fall back to <code>email</code>.</td></tr><tr><td><code>kind</code></td><td><code>employee</code>, <code>contractor</code>, <code>guest</code>, <code>service</code>, <code>agent</code> or <code>customer</code></td><td>What sort of person or principal this is.</td></tr><tr><td><code>groups</code></td><td>string[]</td><td>Names of the groups they belong to.</td></tr><tr><td><code>groupIds</code></td><td>string[]</td><td>The ids of those groups.</td></tr><tr><td><code>roles</code></td><td>string[]</td><td>The live roles they hold in this app. Retired roles are not included.</td></tr><tr><td><code>manager</code></td><td>string, optional</td><td>The id of their manager, only when one is recorded.</td></tr></tbody></table></div>
+<p>Roles are read again on every request, so a change an administrator makes reaches your app on the person&#39;s next request.</p>
+<h2 id="errors-and-statuses">Errors and statuses<a class="d-anchor" href="#errors-and-statuses" aria-label="Link to this section">#</a></h2>
+<p><code>IdentityError</code> has a <code>message</code> and a <code>status</code>. <code>err.cause</code> carries the underlying error, if any. The function <code>identityFailureStatus(err)</code> is also exported; it returns <code>401</code> or <code>503</code> for any error thrown while checking the token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Meaning</th><th scope="col">Message</th></tr></thead><tbody><tr><td>401</td><td>The request carries no valid identity: refused. Do not retry.</td><td><code>no identity header — is this app behind the VMnodes gateway?</code> or <code>identity token failed verification</code></td></tr><tr><td>503</td><td>No verdict was possible; the key set could not be reached. Retry later.</td><td><code>could not verify identity: the VMnodes portal&#39;s key set was unreachable or unusable — this is not a problem with your sign-in</code></td></tr><tr><td>403</td><td>Signed in, and not allowed.</td><td><code>role &#39;&lt;role&gt;&#39; required</code> or <code>group &#39;&lt;group&gt;&#39; required</code></td></tr></tbody></table></div>
+<p>401 covers a bad signature, an expired token, the wrong issuer or audience, a malformed token, an algorithm other than RS256, and a key that does not match. Any error the package does not recognise is a 503, never a 401, so a platform fault does not tell a signed-in person they are signed out.</p>
+<p>Answer a 401 or 503 with that same status. A person who sees 403 on your page needs a role: the portal&#39;s <strong>Change roles</strong> screen is where an administrator gives it.</p>
+<h2 id="raw-contract-for-any-language">Raw contract for any language<a class="d-anchor" href="#raw-contract-for-any-language" aria-label="Link to this section">#</a></h2>
+<p>Use this when your app is not Node, or has no <code>Dockerfile</code> to bring in the package. Every request to your app through the gateway carries:</p>
+<ul><li>Header <code>X-Vmnodes-Identity</code>: a JWT signed with RS256.</li></ul>
+<p>Verify it on every request, with these rules:</p>
+<ol><li>Fetch the key set from <code>&lt;VMNODES_ISSUER_URL&gt;/auth/jwks</code>. It returns <code>{&quot;keys&quot;:[{&quot;kty&quot;:&quot;RSA&quot;,&quot;n&quot;:&quot;…&quot;,&quot;e&quot;:&quot;…&quot;,&quot;kid&quot;:&quot;…&quot;,&quot;alg&quot;:&quot;RS256&quot;,&quot;use&quot;:&quot;sig&quot;}]}</code>. Pick the key whose <code>kid</code> matches the token&#39;s header. Cache the key set, and fetch it again when a <code>kid</code> is not found.</li><li>Accept the algorithm RS256 only.</li><li>Require <code>iss</code> to equal <code>VMNODES_ISSUER_URL</code>.</li><li>Require <code>aud</code> to be present and to equal <code>VMNODES_APP_ID</code>. A token with no <code>aud</code> must be refused; an app that skips this accepts tokens made for other apps.</li><li>Require <code>exp</code> to be in the future. A token lives for 300 seconds from <code>iat</code>, and the gateway makes a fresh one for each request.</li><li>Refuse the request with 401 when any rule fails, and with 503 when the key set cannot be fetched.</li></ol>
+<p>Claims:</p>
+<div class="d-table"><table><thead><tr><th scope="col">Claim</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>sub</code></td><td>The person&#39;s id. Opaque.</td></tr><tr><td><code>iat</code>, <code>exp</code></td><td>Issued at, and expiry (<code>iat</code> + 300 seconds).</td></tr><tr><td><code>iss</code></td><td><code>VMNODES_ISSUER_URL</code>.</td></tr><tr><td><code>aud</code></td><td><code>VMNODES_APP_ID</code>, a string.</td></tr><tr><td><code>email</code>, <code>name</code></td><td>As in the user object.</td></tr><tr><td><code>kind</code></td><td><code>employee</code>, <code>contractor</code>, <code>guest</code>, <code>service</code>, <code>agent</code> or <code>customer</code>.</td></tr><tr><td><code>groups</code>, <code>groupIds</code></td><td>Group names, and group ids.</td></tr><tr><td><code>roles</code></td><td>Live roles in this app. Retired roles are not included.</td></tr><tr><td><code>manager</code></td><td>The manager&#39;s person id, only when present.</td></tr></tbody></table></div>
+<p>The <code>/health</code> path is called by the platform without the header; leave it open.</p>
+<h2 id="local-development">Local development<a class="d-anchor" href="#local-development" aria-label="Link to this section">#</a></h2>
+<p>The starter&#39;s <code>npm run dev</code> starts a stand-in portal at <code>http://127.0.0.1:4100</code>, sets <code>VMNODES_PORTAL_URL</code> to it and <code>VMNODES_APP_ID</code> to <code>app_local_dev</code>, and runs the starter&#39;s <code>server.js</code> behind it. <code>npm run dev</code> signs you in as a person with the editor role; <code>npm run dev -- reader</code> signs you in as a read-only person; while it runs, <code>/_as/reader</code> and <code>/_as/editor</code> switch between them. It does not talk to the real platform. Copy the starter&#39;s <code>dev/</code> folder into your own app to get the same.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a href="/concepts/roles">Roles</a></li><li><a href="/reference/environment">Environment variables</a></li><li><a href="/reference/vmnodes-json">vmnodes.json reference</a></li></ul>
+  <p class="d-meta"><a href="/reference/identity-sdk.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#get-the-package">Get the package</a></li><li class="l2"><a href="#use-it">Use it</a></li><li class="l3"><a href="#constructor">Constructor</a></li><li class="l3"><a href="#methods">Methods</a></li><li class="l3"><a href="#the-user-object">The user object</a></li><li class="l2"><a href="#errors-and-statuses">Errors and statuses</a></li><li class="l2"><a href="#raw-contract-for-any-language">Raw contract for any language</a></li><li class="l2"><a href="#local-development">Local development</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Applications and deployments · VMnodes docs</title>
+<meta name="description" content="Create an app, build or register an image, deploy it to an environment, roll it back, stop and start it, read its configuration, logs and diagnosis, and provision its database. Every app has a staging and a production environment. Deployments are immutable and pinned to an image digest.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/api/applications.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="applications-and-deployments">Applications and deployments</h1>
+<p>Create an app, build or register an image, deploy it to an environment, roll it back, stop and start it, read its configuration, logs and diagnosis, and provision its database. Every app has a <code>staging</code> and a <code>production</code> environment. Deployments are immutable and pinned to an image digest.</p>
+<h2 id="list-applications">List applications<a class="d-anchor" href="#list-applications" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications</code></p>
+<p>Lists the organisation&#39;s applications with a one-word status.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;id&quot;: &quot;app_00000000000000000000000001&quot;,
+    &quot;name&quot;: &quot;quotes&quot;,
+    &quot;displayName&quot;: &quot;Quotes&quot;,
+    &quot;type&quot;: &quot;web&quot;,
+    &quot;hostId&quot;: &quot;host_00000000000000000000000003&quot;,
+    &quot;status&quot;: &quot;active&quot;
+  }
+]</code></pre>
+<p><code>status</code> is <code>active</code>, <code>failed</code> or <code>never deployed</code>.</p>
+<h2 id="create-an-application">Create an application<a class="d-anchor" href="#create-an-application" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications</code></p>
+<p>Creates an app on the organisation&#39;s host and gives it a <code>staging</code> and a <code>production</code> environment. Nothing runs until you deploy.</p>
+<p><strong>Auth:</strong> API token.</p>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;name&quot;:&quot;quotes&quot;,&quot;port&quot;:3000,&quot;displayName&quot;:&quot;Quotes&quot;,&quot;type&quot;:&quot;web&quot;,&quot;resourceProfile&quot;:&quot;standard&quot;,&quot;healthEndpoint&quot;:&quot;/health&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;name&quot;: &quot;quotes&quot;,
+  &quot;port&quot;: 3000,
+  &quot;displayName&quot;: &quot;Quotes&quot;,
+  &quot;type&quot;: &quot;web&quot;,
+  &quot;resourceProfile&quot;: &quot;standard&quot;,
+  &quot;healthEndpoint&quot;: &quot;/health&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;organisationId&quot;: &quot;org_00000000000000000000000004&quot;,
+  &quot;hostId&quot;: &quot;host_00000000000000000000000003&quot;,
+  &quot;name&quot;: &quot;quotes&quot;,
+  &quot;displayName&quot;: &quot;Quotes&quot;,
+  &quot;type&quot;: &quot;web&quot;,
+  &quot;port&quot;: 3000,
+  &quot;resourceProfile&quot;: &quot;standard&quot;,
+  &quot;accessProfile&quot;: &quot;company&quot;,
+  &quot;healthEndpoint&quot;: &quot;/health&quot;,
+  &quot;databaseEnabled&quot;: false,
+  &quot;persistentStorage&quot;: false,
+  &quot;telemetryProfile&quot;: &quot;standard&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+  &quot;updatedAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>422</td><td><code>app/invalid-manifest</code></td><td><code>name and port are required</code></td></tr><tr><td>422</td><td><code>app/reserved-name</code></td><td><code>That name is reserved.</code></td></tr><tr><td>422</td><td><code>app/no-host</code></td><td><code>no healthy host with a live node available</code></td></tr><tr><td>422</td><td><code>app/name-taken</code></td><td><code>You already have an app called &lt;name&gt;. Choose a different name.</code></td></tr></tbody></table></div>
+<p><code>name</code> and <code>port</code> are required. <code>type</code> is <code>web</code>, <code>api</code>, <code>worker</code>, <code>scheduled-job</code> or <code>mcp-server</code>. <code>resourceProfile</code> is <code>tiny</code>, <code>standard</code>, <code>large</code>, <code>compute</code> or <code>custom</code> and defaults to <code>standard</code>. <code>hostId</code> is optional and defaults to the organisation&#39;s host. A name that is too long returns 422 <code>app/name-too-long</code>.</p>
+<h2 id="get-an-application">Get an application<a class="d-anchor" href="#get-an-application" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}</code></p>
+<p>Returns one application.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;organisationId&quot;: &quot;org_00000000000000000000000004&quot;,
+  &quot;hostId&quot;: &quot;host_00000000000000000000000003&quot;,
+  &quot;name&quot;: &quot;quotes&quot;,
+  &quot;displayName&quot;: &quot;Quotes&quot;,
+  &quot;type&quot;: &quot;web&quot;,
+  &quot;port&quot;: 3000,
+  &quot;resourceProfile&quot;: &quot;standard&quot;,
+  &quot;accessProfile&quot;: &quot;company&quot;,
+  &quot;healthEndpoint&quot;: &quot;/health&quot;,
+  &quot;databaseEnabled&quot;: false,
+  &quot;persistentStorage&quot;: false,
+  &quot;telemetryProfile&quot;: &quot;standard&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+  &quot;updatedAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<h2 id="build-an-image-from-git">Build an image from git<a class="d-anchor" href="#build-an-image-from-git" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/builds</code></p>
+<p>Builds the repository at a public git URL into an image and returns its digest. The repository needs a <code>Dockerfile</code>. The digest is registered for this app, ready to deploy.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/builds&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;source&quot;:{&quot;kind&quot;:&quot;git&quot;,&quot;url&quot;:&quot;https://github.com/example/quotes.git&quot;,&quot;ref&quot;:&quot;main&quot;}}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;source&quot;: {
+    &quot;kind&quot;: &quot;git&quot;,
+    &quot;url&quot;: &quot;https://github.com/example/quotes.git&quot;,
+    &quot;ref&quot;: &quot;main&quot;
+  }
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+  &quot;undeclaredTemplateRoles&quot;: []
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>403</td><td><code>build/path-source-disabled</code></td><td><code>path sources are disabled on this control plane; build from a git URL</code></td></tr></tbody></table></div>
+<p><code>ref</code> is optional. A failed build returns 422 with a code and a message naming the cause. The response can also carry <code>fetchPath</code>. <code>undeclaredTemplateRoles</code> lists permission-template roles the app uses but its manifest does not declare.</p>
+<h2 id="register-an-image-digest">Register an image digest<a class="d-anchor" href="#register-an-image-digest" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/images</code></p>
+<p>Registers an image you built elsewhere so it can be deployed. Send a full digest reference.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/images&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;digest&quot;:&quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,&quot;gitCommit&quot;:&quot;4c1d9e07a35b82f6d0e1c4b97a52f3860de1b7c9&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;digest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+  &quot;gitCommit&quot;: &quot;4c1d9e07a35b82f6d0e1c4b97a52f3860de1b7c9&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>201</code></p>
+<pre data-lang="json"><code>{
+  &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>422</td><td><code>deploy/placeholder-digest</code></td><td><code>image is the release placeholder, not a built digest — the all-zero digest is well-formed enough to pass a shape check and to sign, and fails only at pull. Register the digest from the signing commit, not the tagged one.</code></td></tr><tr><td>422</td><td><code>deploy/bad-digest</code></td><td><code>image must be a digest reference: &lt;registry&gt;/&lt;repo&gt;[:tag]@sha256:&lt;64 hex&gt;</code></td></tr><tr><td>422</td><td><code>deploy/bad-git-commit</code></td><td><code>gitCommit must be the full 40-character lowercase hex sha — got &#39;&lt;value&gt;&#39;. An abbreviated or otherwise malformed commit is refused, not stored: a stored abbreviation invites prefix comparison later, and prefix comparison is label-matching.</code></td></tr></tbody></table></div>
+<p><code>gitCommit</code> is optional. When sent it must be the full 40-character commit.</p>
+<h2 id="list-environments">List environments<a class="d-anchor" href="#list-environments" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}/environments</code></p>
+<p>Lists an app&#39;s environments. Use it to turn <code>staging</code> or <code>production</code> into an environment id.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/environments&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;id&quot;: &quot;env_00000000000000000000000005&quot;,
+    &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+    &quot;name&quot;: &quot;staging&quot;,
+    &quot;isProduction&quot;: false,
+    &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+    &quot;stoppedAt&quot;: null,
+    &quot;stoppedBy&quot;: null
+  },
+  {
+    &quot;id&quot;: &quot;env_00000000000000000000000006&quot;,
+    &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+    &quot;name&quot;: &quot;production&quot;,
+    &quot;isProduction&quot;: true,
+    &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+    &quot;stoppedAt&quot;: null,
+    &quot;stoppedBy&quot;: null
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<p><code>stoppedAt</code> and <code>stoppedBy</code> are set while the environment is stopped, otherwise null.</p>
+<h2 id="deploy-an-image">Deploy an image<a class="d-anchor" href="#deploy-an-image" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/deployments</code></p>
+<p>Starts a deployment of an image digest to an environment. The call returns at once with status <code>deploying</code>; poll the deployments list for <code>active</code> or <code>failed</code>. A deployment that fails its health check does not take traffic.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/deployments&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;environmentId&quot;:&quot;env_00000000000000000000000006&quot;,&quot;imageDigest&quot;:&quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+  &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;dep_00000000000000000000000007&quot;,
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+  &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+  &quot;createdBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+  &quot;status&quot;: &quot;deploying&quot;,
+  &quot;startedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>422</td><td><code>deploy/env-not-found</code></td><td><code>no environment &lt;environmentId&gt;</code></td></tr><tr><td>422</td><td><code>deploy/unknown-image</code></td><td><code>image digest not in registry metadata — build first</code></td></tr><tr><td>422</td><td><code>deploy/scan-gate</code></td><td><code>image scan status is &#39;&lt;status&gt;&#39; — refused regardless of the scan gate mode</code></td></tr><tr><td>422</td><td><code>deploy/host-not-ready</code></td><td><code>no ready node on the application&#39;s host</code></td></tr></tbody></table></div>
+<p>Deployment <code>status</code> is <code>pending</code>, <code>building</code>, <code>deploying</code>, <code>validating</code>, <code>active</code>, <code>failed</code>, <code>rolled-back</code> or <code>superseded</code>. Other 422 codes: <code>deploy/image-withdrawn</code>, <code>deploy/no-address</code>, <code>deploy/agent-too-old</code>, <code>deploy/no-service</code>, and database codes when the app&#39;s database is not ready. A scan that blocks the deploy can also say <code>the scan gate blocks this deploy</code> in the same code.</p>
+<h2 id="list-deployments">List deployments<a class="d-anchor" href="#list-deployments" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}/deployments</code></p>
+<p>Lists up to 50 deployments of one environment, newest first.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/deployments?environmentId=env_00000000000000000000000006&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;id&quot;: &quot;dep_00000000000000000000000007&quot;,
+    &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+    &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+    &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+    &quot;createdBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+    &quot;status&quot;: &quot;deploying&quot;,
+    &quot;startedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+  },
+  {
+    &quot;id&quot;: &quot;dep_00000000000000000000000008&quot;,
+    &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+    &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+    &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+    &quot;createdBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+    &quot;status&quot;: &quot;superseded&quot;,
+    &quot;startedAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+    &quot;completedAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>400</td><td><code>deployments/environment-required</code></td><td><code>environmentId query parameter is required</code></td></tr></tbody></table></div>
+<p><code>environmentId</code> is required. A deployment may also carry <code>previousDeploymentId</code>, <code>failureReason</code> and <code>viaAgent</code>.</p>
+<h2 id="roll-back">Roll back<a class="d-anchor" href="#roll-back" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/rollback</code></p>
+<p>Rolls an environment back to its previous known-good deployment, or to a named one. The rollback is itself a new deployment of the older image.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/rollback&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot; \
+  -H &quot;content-type: application/json&quot; \
+  --data &#39;{&quot;environmentId&quot;:&quot;env_00000000000000000000000006&quot;,&quot;toDeploymentId&quot;:&quot;dep_00000000000000000000000008&quot;}&#39;</code></pre>
+<p><strong>Request body</strong></p>
+<pre data-lang="json"><code>{
+  &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+  &quot;toDeploymentId&quot;: &quot;dep_00000000000000000000000008&quot;
+}</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;dep_00000000000000000000000007&quot;,
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+  &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+  &quot;createdBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+  &quot;status&quot;: &quot;deploying&quot;,
+  &quot;startedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+  &quot;previousDeploymentId&quot;: &quot;dep_00000000000000000000000007&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>422</td><td><code>rollback/no-target</code></td><td><code>no previous deployment to roll back to</code></td></tr></tbody></table></div>
+<p><code>toDeploymentId</code> is optional. A portal session may also call this route.</p>
+<h2 id="stop-an-environment">Stop an environment<a class="d-anchor" href="#stop-an-environment" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/environments/{environmentId}/stop</code></p>
+<p>Pauses an environment by stopping its container. Reversible: start redeploys the same image. It frees CPU and memory on the host.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr><tr><td><code>environmentId</code></td><td>path</td><td>yes</td><td>The environment id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/environments/&lt;environmentId&gt;/stop&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;stoppedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+  &quot;stoppedBy&quot;: &quot;usr_00000000000000000000000002&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>403</td><td><code>environment/permission-denied</code></td><td><code>stopping or starting an application needs an organisation administrator, or the application&#39;s admin or owner role</code></td></tr><tr><td>404</td><td><code>environment/not-found</code></td><td><code>no environment &lt;environmentId&gt;</code></td></tr><tr><td>409</td><td><code>environment/stop-conflict</code></td><td><code>this environment is already stopped</code></td></tr></tbody></table></div>
+<p>The caller must be an organisation administrator or hold the app&#39;s admin or owner role.</p>
+<h2 id="start-an-environment">Start an environment<a class="d-anchor" href="#start-an-environment" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/environments/{environmentId}/start</code></p>
+<p>Resumes a stopped environment by redeploying the image it was running. The deploy gates apply again, so a build the scan now refuses cannot be restarted.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr><tr><td><code>environmentId</code></td><td>path</td><td>yes</td><td>The environment id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/environments/&lt;environmentId&gt;/start&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;id&quot;: &quot;dep_00000000000000000000000007&quot;,
+  &quot;applicationId&quot;: &quot;app_00000000000000000000000001&quot;,
+  &quot;environmentId&quot;: &quot;env_00000000000000000000000006&quot;,
+  &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+  &quot;createdBy&quot;: &quot;usr_00000000000000000000000002&quot;,
+  &quot;status&quot;: &quot;deploying&quot;,
+  &quot;startedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>403</td><td><code>environment/permission-denied</code></td><td><code>stopping or starting an application needs an organisation administrator, or the application&#39;s admin or owner role</code></td></tr><tr><td>404</td><td><code>environment/not-found</code></td><td><code>no environment &lt;environmentId&gt;</code></td></tr><tr><td>409</td><td><code>environment/start-conflict</code></td><td><code>this environment is not stopped; there is nothing to start</code></td></tr><tr><td>422</td><td><code>environment/no-deployment</code></td><td><code>this environment has never had a successful deployment to restart</code></td></tr></tbody></table></div>
+<p>The caller must be an organisation administrator or hold the app&#39;s admin or owner role.</p>
+<h2 id="list-configuration">List configuration<a class="d-anchor" href="#list-configuration" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}/config</code></p>
+<p>Lists an environment&#39;s configuration entries. Values of secret entries are never returned.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/config?environmentId=env_00000000000000000000000006&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;name&quot;: &quot;LOG_LEVEL&quot;,
+    &quot;isSecret&quot;: false,
+    &quot;removed&quot;: false,
+    &quot;version&quot;: 2,
+    &quot;setAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+    &quot;inEffect&quot;: true,
+    &quot;value&quot;: &quot;info&quot;
+  },
+  {
+    &quot;name&quot;: &quot;DATABASE_URL&quot;,
+    &quot;isSecret&quot;: true,
+    &quot;removed&quot;: false,
+    &quot;version&quot;: 1,
+    &quot;setAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;,
+    &quot;inEffect&quot;: true
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<p><code>value</code> is present only when <code>isSecret</code> is false. <code>inEffect</code> is false until the entry reaches a running deployment.</p>
+<h2 id="list-secret-names">List secret names<a class="d-anchor" href="#list-secret-names" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}/secrets</code></p>
+<p>Lists the names of an environment&#39;s secrets with their versions. Values are never returned.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/secrets?environmentId=env_00000000000000000000000006&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;name&quot;: &quot;DATABASE_URL&quot;,
+    &quot;version&quot;: 1,
+    &quot;createdAt&quot;: &quot;2026-10-20T03:14:07.000Z&quot;
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<h2 id="provision-the-database">Provision the database<a class="d-anchor" href="#provision-the-database" aria-label="Link to this section">#</a></h2>
+<p><code>POST /v1/applications/{appId}/database</code></p>
+<p>Provisions the app&#39;s own PostgreSQL database. It is safe to call again. <code>DATABASE_URL</code> is set as a secret in every environment and reaches the app on its next deploy.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X POST &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/database&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>202</code></p>
+<pre data-lang="json"><code>{
+  &quot;databaseId&quot;: &quot;db_01JBX34A08YC14FXVWRVX8PVFT&quot;,
+  &quot;name&quot;: &quot;quotes&quot;,
+  &quot;roleName&quot;: &quot;app_quotes_user&quot;,
+  &quot;status&quot;: &quot;provisioning&quot;
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr><tr><td>422</td><td><code>db/name-conflict</code></td><td><code>host &lt;hostId&gt; already has a database named &#39;&lt;name&gt;&#39; (&lt;dbId&gt;), owned by application &lt;appId&gt;. Application names that normalise to the same identifier cannot share a host: rename one, or place it on another host. Nothing was provisioned.</code></td></tr></tbody></table></div>
+<p>The database name is the app name in lowercase with any character outside <code>a-z</code>, <code>0-9</code> and <code>_</code> replaced by <code>_</code>. <code>db/name-conflict</code> returns 422 when another app&#39;s database on the same host already has that name.</p>
+<h2 id="list-restore-points">List restore points<a class="d-anchor" href="#list-restore-points" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/databases/{dbId}/restore-points</code></p>
+<p>Lists the 20 most recent verified restore points for a database, newest first.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>dbId</code></td><td>path</td><td>yes</td><td>The database id, from the database provisioning response.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/databases/&lt;dbId&gt;/restore-points&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>[
+  {
+    &quot;id&quot;: &quot;rp_01JBX36K6RCQY1G9B7XF4DR5SB&quot;,
+    &quot;backupId&quot;: &quot;bak_01JBX3FVAJCWG4HWPXX3847K8P&quot;,
+    &quot;databaseId&quot;: &quot;db_01JBX34A08YC14FXVWRVX8PVFT&quot;,
+    &quot;verifiedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+  }
+]</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<h2 id="read-logs">Read logs<a class="d-anchor" href="#read-logs" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}/logs</code></p>
+<p>Reads recent log lines for an environment, optionally filtered by a substring.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/logs?environmentId=env_00000000000000000000000006&amp;sinceMinutes=60&amp;search=error&amp;limit=100&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;lines&quot;: [
+    {
+      &quot;timestamp&quot;: &quot;2026-10-21T22:41:55.000Z&quot;,
+      &quot;line&quot;: &quot;error: connection refused to upstream&quot;
+    }
+  ]
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<p><code>environmentId</code> is required. <code>sinceMinutes</code> defaults to 60 and <code>limit</code> to 100. <code>search</code> matches a substring.</p>
+<h2 id="diagnose-an-application">Diagnose an application<a class="d-anchor" href="#diagnose-an-application" aria-label="Link to this section">#</a></h2>
+<p><code>GET /v1/applications/{appId}/diagnose</code></p>
+<p>Answers why an app is broken in one call: the latest deployment, node health, recent error lines and a plain summary.</p>
+<p><strong>Auth:</strong> API token.</p>
+<div class="d-table"><table><thead><tr><th scope="col">Parameter</th><th scope="col">In</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>appId</code></td><td>path</td><td>yes</td><td>The application id.</td></tr></tbody></table></div>
+<p><strong>Example</strong></p>
+<pre data-lang="bash"><code>curl -sS -X GET &quot;$VMNODES_API_URL/v1/applications/&lt;appId&gt;/diagnose?environmentId=env_00000000000000000000000006&quot; \
+  -H &quot;Authorization: Bearer $VMNODES_API_TOKEN&quot;</code></pre>
+<p><strong>Response</strong> <code>200</code></p>
+<pre data-lang="json"><code>{
+  &quot;summary&quot;: &quot;The latest deployment failed its health check: the app did not answer on port 3000.&quot;,
+  &quot;deployment&quot;: {
+    &quot;id&quot;: &quot;dep_00000000000000000000000007&quot;,
+    &quot;status&quot;: &quot;failed&quot;,
+    &quot;imageDigest&quot;: &quot;registry.example.com/acme/quotes@sha256:9f2c4a1e7b3d5086a1c2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a&quot;,
+    &quot;startedAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+  },
+  &quot;recentErrors&quot;: [
+    &quot;error: listen EADDRINUSE: address already in use :::3000&quot;
+  ],
+  &quot;node&quot;: {
+    &quot;status&quot;: &quot;ready&quot;,
+    &quot;lastHeartbeatAt&quot;: &quot;2026-10-21T22:41:55.000Z&quot;
+  }
+}</code></pre>
+<div class="d-table"><table><thead><tr><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Message</th></tr></thead><tbody><tr><td>404</td><td><code>api/not-found</code></td><td><code>no such resource</code></td></tr></tbody></table></div>
+<p><code>deployment</code> and <code>node</code> are left out when there is none. <code>environmentId</code> is required.</p>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/api/">API reference</a></li><li><a href="/troubleshooting">Troubleshooting</a></li></ul>
+  <p class="d-meta"><a href="/api/applications.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#list-applications">List applications</a></li><li class="l2"><a href="#create-an-application">Create an application</a></li><li class="l2"><a href="#get-an-application">Get an application</a></li><li class="l2"><a href="#build-an-image-from-git">Build an image from git</a></li><li class="l2"><a href="#register-an-image-digest">Register an image digest</a></li><li class="l2"><a href="#list-environments">List environments</a></li><li class="l2"><a href="#deploy-an-image">Deploy an image</a></li><li class="l2"><a href="#list-deployments">List deployments</a></li><li class="l2"><a href="#roll-back">Roll back</a></li><li class="l2"><a href="#stop-an-environment">Stop an environment</a></li><li class="l2"><a href="#start-an-environment">Start an environment</a></li><li class="l2"><a href="#list-configuration">List configuration</a></li><li class="l2"><a href="#list-secret-names">List secret names</a></li><li class="l2"><a href="#provision-the-database">Provision the database</a></li><li class="l2"><a href="#list-restore-points">List restore points</a></li><li class="l2"><a href="#read-logs">Read logs</a></li><li class="l2"><a href="#diagnose-an-application">Diagnose an application</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

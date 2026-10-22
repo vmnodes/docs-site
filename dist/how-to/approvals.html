@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submit and approve · VMnodes docs</title>
+<meta name="description" content="Build an app where one person raises a request and a different person approves or rejects it, with the rule enforced by the server and not by what the page shows. Read this for purchase, expense, leave or any other sign-off. The example is purchase requests at the org acme, approved by the budget holder.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/how-to/approvals.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals" aria-current="page">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="submit-and-approve">Submit and approve</h1>
+<p>Build an app where one person raises a request and a different person approves or rejects it, with the rule enforced by the server and not by what the page shows. Read this for purchase, expense, leave or any other sign-off. The example is purchase requests at the org <code>acme</code>, approved by the budget holder.</p>
+<p>You start from the starter, so do <a href="/getting-started">Getting started</a> steps 1 to 3 first. This page assumes the file layout and the pretend portal explained in <a href="/how-to/form-and-list">Build a form-and-list app</a>; only what differs is repeated here.</p>
+<h2 id="who-may-do-what">Who may do what<a class="d-anchor" href="#who-may-do-what" aria-label="Link to this section">#</a></h2>
+<div class="d-table"><table><thead><tr><th scope="col">Role</th><th scope="col">Can</th><th scope="col">Cannot</th></tr></thead><tbody><tr><td><code>purchasing.requester</code></td><td>raise a request; see only the requests they raised</td><td>see anyone else&#39;s; approve or reject</td></tr><tr><td><code>purchasing.approver</code></td><td>see every request; approve or reject one, with an optional reason</td><td>decide a request they raised themselves</td></tr><tr><td>neither</td><td>nothing: the app answers 403</td><td></td></tr></tbody></table></div>
+<p>A person can hold both roles. They can then raise and see everything, but still cannot decide their own request.</p>
+<h2 id="1-remove-what-this-app-does-not-use">1. Remove what this app does not use<a class="d-anchor" href="#1-remove-what-this-app-does-not-use" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>rm publish.js manifest.json test/smoke.js
+ls</code></pre>
+<p>It worked when <code>ls</code> lists <code>Dockerfile</code>, <code>package.json</code>, <code>server.js</code>, <code>store.js</code> and <code>vmnodes.json</code>, and does not list <code>publish.js</code> or <code>manifest.json</code>.</p>
+<h2 id="2-declare-both-roles-and-a-database">2. Declare both roles and a database<a class="d-anchor" href="#2-declare-both-roles-and-a-database" aria-label="Link to this section">#</a></h2>
+<p>Replace <code>vmnodes.json</code>. Each role&#39;s <code>description</code> is what an administrator reads before giving it, so it says what the person can then do.</p>
+<pre data-lang="json"><code>{
+  &quot;apiVersion&quot;: &quot;vmnodes.com/v1&quot;,
+  &quot;roles&quot;: [
+    {
+      &quot;name&quot;: &quot;purchasing.requester&quot;,
+      &quot;description&quot;: &quot;Can raise purchase requests and see the ones they raised.&quot;
+    },
+    {
+      &quot;name&quot;: &quot;purchasing.approver&quot;,
+      &quot;description&quot;: &quot;Can see every purchase request and approve or reject them.&quot;
+    }
+  ],
+  &quot;database&quot;: true
+}</code></pre>
+<p>It worked when this prints <code>purchasing.requester purchasing.approver</code>:</p>
+<pre data-lang="bash"><code>node -e &#39;console.log(require(&quot;./vmnodes.json&quot;).roles.map((r) =&gt; r.name).join(&quot; &quot;))&#39;</code></pre>
+<h2 id="3-replace-storejs">3. Replace <code>store.js</code><a class="d-anchor" href="#3-replace-storejs" aria-label="Link to this section">#</a></h2>
+<p>The request&#39;s owner is kept as <code>owner_id</code>, which is the identity&#39;s <code>id</code>. An <code>id</code> never changes for a person, and an email address can be reused or changed, so never key on the email. The <code>where status = &#39;pending&#39;</code> in <code>decide</code> is what stops two approvers deciding the same request.</p>
+<pre data-lang="js"><code>// store.js: where the purchase requests are kept.
+//
+//   DATABASE_URL set   requests are kept in Postgres, across restarts and updates.
+//   not set            requests are kept in memory and cleared on every restart.
+//
+// On the platform, DATABASE_URL is set for you when vmnodes.json says
+// &quot;database&quot;: true. There is no fallback: if DATABASE_URL is set but the
+// database cannot be reached, the app refuses to start.
+//
+// A request&#39;s owner is kept as owner_id: the identity&#39;s `id`, which never changes
+// for a person. Never key on email: an address can be reused or changed.
+
+function memoryStore() {
+  const rows = [];
+  return {
+    kind: &quot;memory&quot;,
+    async init() {},
+    // ownerId: only that person&#39;s requests; null: everyone&#39;s (for approvers).
+    async list(ownerId) { return rows.filter((r) =&gt; ownerId === null || r.ownerId === ownerId).map((r) =&gt; ({ ...r })); },
+    async get(id) { const r = rows.find((x) =&gt; x.id === id); return r ? { ...r } : null; },
+    async add(r) { rows.unshift({ ...r, status: &quot;pending&quot;, decidedById: null, decidedByName: null, decidedAt: null, note: &quot;&quot; }); },
+    // Only a pending request can be decided. Returns the request, or null if it was not pending.
+    async decide(id, { status, byId, byName, note, at }) {
+      const r = rows.find((x) =&gt; x.id === id &amp;&amp; x.status === &quot;pending&quot;);
+      if (!r) return null;
+      Object.assign(r, { status, decidedById: byId, decidedByName: byName, note, decidedAt: at });
+      return { ...r };
+    },
+    async close() {},
+  };
+}
+
+function postgresStore(url, { attempts = 5, delayMs = 1000, log = console } = {}) {
+  const postgres = require(&quot;postgres&quot;);
+  const sql = postgres(url, { max: 3, onnotice: () =&gt; {} });
+  const cols = sql`id, owner_id, owner_name, item, amount_cents, created_at, status, decided_by_id, decided_by_name, decided_at, note`;
+  const toRequest = (r) =&gt; ({
+    id: r.id, ownerId: r.owner_id, ownerName: r.owner_name, item: r.item, amountCents: r.amount_cents,
+    createdAt: r.created_at.toISOString(), status: r.status, decidedById: r.decided_by_id, decidedByName: r.decided_by_name,
+    decidedAt: r.decided_at ? r.decided_at.toISOString() : null, note: r.note,
+  });
+  return {
+    kind: &quot;postgres&quot;,
+    async init() {
+      for (let i = 1; ; i++) {
+        try {
+          await sql`create table if not exists requests (
+            seq bigserial primary key,
+            id uuid not null unique,
+            owner_id text not null,
+            owner_name text not null,
+            item text not null,
+            amount_cents integer not null,
+            created_at timestamptz not null,
+            status text not null default &#39;pending&#39; check (status in (&#39;pending&#39;, &#39;approved&#39;, &#39;rejected&#39;)),
+            decided_by_id text,
+            decided_by_name text,
+            decided_at timestamptz,
+            note text not null default &#39;&#39;
+          )`;
+          await sql`create index if not exists requests_owner_idx on requests (owner_id)`;
+          return;
+        } catch (err) {
+          if (i &gt;= attempts) throw new Error(`could not reach the database after ${attempts} tries: ${err.message}`);
+          log.log(`database not reachable yet (try ${i} of ${attempts}): ${err.message}`);
+          await new Promise((r) =&gt; setTimeout(r, delayMs));
+        }
+      }
+    },
+    async list(ownerId) {
+      const rows = ownerId === null
+        ? await sql`select ${cols} from requests order by seq desc`
+        : await sql`select ${cols} from requests where owner_id = ${ownerId} order by seq desc`;
+      return rows.map(toRequest);
+    },
+    async get(id) {
+      const rows = await sql`select ${cols} from requests where id = ${id}`;
+      return rows[0] ? toRequest(rows[0]) : null;
+    },
+    async add(r) {
+      await sql`insert into requests (id, owner_id, owner_name, item, amount_cents, created_at)
+                values (${r.id}, ${r.ownerId}, ${r.ownerName}, ${r.item}, ${r.amountCents}, ${r.createdAt})`;
+    },
+    // The &quot;where status = &#39;pending&#39;&quot; is what stops two approvers deciding the same request.
+    async decide(id, { status, byId, byName, note, at }) {
+      const rows = await sql`update requests set status = ${status}, decided_by_id = ${byId}, decided_by_name = ${byName}, note = ${note}, decided_at = ${at}
+                             where id = ${id} and status = &#39;pending&#39; returning ${cols}`;
+      return rows[0] ? toRequest(rows[0]) : null;
+    },
+    async close() { await sql.end({ timeout: 5 }); },
+  };
+}
+
+function openStore({ env = process.env, log = console } = {}) {
+  return env.DATABASE_URL ? postgresStore(env.DATABASE_URL, { log }) : memoryStore();
+}
+
+module.exports = { openStore };</code></pre>
+<h2 id="4-replace-serverjs">4. Replace <code>server.js</code><a class="d-anchor" href="#4-replace-serverjs" aria-label="Link to this section">#</a></h2>
+<p>The checks that matter are in the routes: scope for reading, <code>requireRole</code> for deciding, the own-request rule, and the same 404 for a request that is missing and one that is not yours.</p>
+<pre data-lang="js"><code>// server.js: the whole app. Purchase requests: people with the &quot;requester&quot; role raise
+// a request, and people with the &quot;approver&quot; role approve or reject it.
+//
+// Who may do what, and every one of these is checked on the SERVER:
+//   requester   raise a request; see only the requests they raised
+//   approver    see every request; approve or reject one (never their own)
+const http = require(&quot;node:http&quot;);
+const crypto = require(&quot;node:crypto&quot;);
+const { VmnodesIdentity, IdentityError } = require(&quot;@vmnodes/identity&quot;);
+const { openStore } = require(&quot;./store&quot;);
+
+const APP_NAME = process.env.VMNODES_APP_NAME || &quot;purchase-requests&quot;;
+// Must match the role names in vmnodes.json exactly.
+const ROLE_PREFIX = &quot;purchasing&quot;;
+const REQUESTER_ROLE = `${ROLE_PREFIX}.requester`;
+const APPROVER_ROLE = `${ROLE_PREFIX}.approver`;
+const VERSION = require(&quot;./package.json&quot;).version;
+const BUILD_COMMIT = process.env.BUILD_COMMIT || null;
+const PORT = Number(process.env.PORT || 3000);
+const LISTEN_ADDRESS = process.env.LISTEN_ADDRESS || undefined;
+
+let identity;
+try {
+  identity = new VmnodesIdentity();
+} catch (err) {
+  console.error(`${err.message}\nThe platform sets these when your app is deployed; locally, \`npm run dev\` sets them for you.`);
+  process.exit(1);
+}
+const store = openStore();
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const money = (cents) =&gt; (cents / 100).toFixed(2);
+const esc = (s) =&gt; String(s).replace(/[&amp;&lt;&gt;&quot;&#39;]/g, (c) =&gt; ({ &quot;&amp;&quot;: &quot;&amp;amp;&quot;, &quot;&lt;&quot;: &quot;&amp;lt;&quot;, &quot;&gt;&quot;: &quot;&amp;gt;&quot;, &#39;&quot;&#39;: &quot;&amp;quot;&quot;, &quot;&#39;&quot;: &quot;&amp;#39;&quot; }[c]));
+
+function send(res, status, body, type = &quot;application/json&quot;) {
+  res.writeHead(status, { &quot;content-type&quot;: type });
+  res.end(type === &quot;application/json&quot; ? JSON.stringify(body) : body);
+}
+
+function readBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) =&gt; {
+    let size = 0; const chunks = [];
+    req.on(&quot;data&quot;, (c) =&gt; { size += c.length; if (size &gt; limit) { reject(new IdentityError(&quot;body too large&quot;, 413)); req.destroy(); } else chunks.push(c); });
+    req.on(&quot;end&quot;, () =&gt; resolve(Buffer.concat(chunks).toString(&quot;utf8&quot;)));
+    req.on(&quot;error&quot;, reject);
+  });
+}
+
+// Reads named text fields from a form post or a JSON post. Never trusts the types.
+async function readFields(req, names) {
+  const raw = await readBody(req);
+  const json = (req.headers[&quot;content-type&quot;] || &quot;&quot;).includes(&quot;application/json&quot;);
+  const o = json ? JSON.parse(raw || &quot;{}&quot;) : Object.fromEntries(new URLSearchParams(raw));
+  return Object.fromEntries(names.map((n) =&gt; [n, typeof o[n] === &quot;string&quot; || typeof o[n] === &quot;number&quot; ? String(o[n]).trim() : &quot;&quot;]));
+}
+
+// &quot;12&quot;, &quot;12.5&quot; and &quot;12.50&quot; are fine; &quot;-3&quot;, &quot;1e3&quot; and &quot;12.345&quot; are not. Returns whole cents, or null.
+function parseAmount(text) {
+  const m = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(text);
+  if (!m) return null;
+  const cents = Number(m[1]) * 100 + Number((m[2] || &quot;&quot;).padEnd(2, &quot;0&quot;));
+  return cents &gt; 0 ? cents : null;
+}
+
+const holds = (user, role) =&gt; user.roles.includes(role);
+
+function view(r) {
+  return { id: r.id, ownerName: r.ownerName, item: r.item, amount: money(r.amountCents), createdAt: r.createdAt, status: r.status, decidedByName: r.decidedByName, decidedAt: r.decidedAt, note: r.note };
+}
+
+function shell(inner) {
+  return `&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;&lt;title&gt;Purchase requests&lt;/title&gt;
+&lt;style&gt;body{font:16px/1.5 system-ui,sans-serif;background:#0b0c10;color:#e8e8ee;max-width:820px;margin:0 auto;padding:16px}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid #2a2c35;padding:8px 6px;vertical-align:top}small,th{color:#9a9cab;font-weight:normal}label{display:block;margin-top:8px}input{width:100%;background:#15161c;color:inherit;border:1px solid #2a2c35;border-radius:6px;padding:8px;box-sizing:border-box;font:inherit}button{margin:8px 8px 0 0;background:#5b5bd6;color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit}.err{border:1px solid #d65b5b;border-radius:6px;padding:8px}code{font-family:ui-monospace,monospace}&lt;/style&gt;&lt;/head&gt;&lt;body&gt;${inner}&lt;/body&gt;&lt;/html&gt;`;
+}
+
+function page(user, requests, { error = &quot;&quot;, values = {} } = {}) {
+  const approver = holds(user, APPROVER_ROLE);
+  const rows = requests.length
+    ? requests.map((r) =&gt; {
+      // Showing the buttons only to approvers is a courtesy. The server checks the role again on every decision.
+      const decide = r.status === &quot;pending&quot; &amp;&amp; approver &amp;&amp; r.ownerId !== user.id
+        ? `&lt;form method=&quot;post&quot; action=&quot;/requests/${esc(r.id)}/decision&quot;&gt;&lt;input name=&quot;note&quot; maxlength=&quot;300&quot; placeholder=&quot;Reason (optional)&quot; aria-label=&quot;Reason&quot;&gt;&lt;button name=&quot;decision&quot; value=&quot;approve&quot; type=&quot;submit&quot;&gt;Approve&lt;/button&gt;&lt;button name=&quot;decision&quot; value=&quot;reject&quot; type=&quot;submit&quot;&gt;Reject&lt;/button&gt;&lt;/form&gt;`
+        : &quot;&quot;;
+      const outcome = r.status === &quot;pending&quot; ? &quot;Waiting&quot; : `${esc(r.status === &quot;approved&quot; ? &quot;Approved&quot; : &quot;Rejected&quot;)} by ${esc(r.decidedByName)}${r.note ? `&lt;br&gt;&lt;small&gt;${esc(r.note)}&lt;/small&gt;` : &quot;&quot;}`;
+      return `&lt;tr&gt;&lt;td&gt;${esc(r.item)}&lt;br&gt;&lt;small&gt;${esc(r.ownerName)}&lt;/small&gt;&lt;/td&gt;&lt;td&gt;${esc(money(r.amountCents))}&lt;/td&gt;&lt;td&gt;${outcome}${decide}&lt;/td&gt;&lt;/tr&gt;`;
+    }).join(&quot;&quot;)
+    : `&lt;tr&gt;&lt;td colspan=&quot;3&quot;&gt;No requests yet.&lt;/td&gt;&lt;/tr&gt;`;
+  const form = holds(user, REQUESTER_ROLE)
+    ? `&lt;form method=&quot;post&quot; action=&quot;/requests&quot;&gt;${error ? `&lt;p class=&quot;err&quot; role=&quot;alert&quot;&gt;${esc(error)}&lt;/p&gt;` : &quot;&quot;}
+&lt;label for=&quot;item&quot;&gt;What do you need?&lt;/label&gt;&lt;input id=&quot;item&quot; name=&quot;item&quot; required maxlength=&quot;200&quot; value=&quot;${esc(values.item || &quot;&quot;)}&quot;&gt;
+&lt;label for=&quot;amount&quot;&gt;Cost&lt;/label&gt;&lt;input id=&quot;amount&quot; name=&quot;amount&quot; required inputmode=&quot;decimal&quot; placeholder=&quot;49.90&quot; value=&quot;${esc(values.amount || &quot;&quot;)}&quot;&gt;
+&lt;button type=&quot;submit&quot;&gt;Send request&lt;/button&gt;&lt;/form&gt;`
+    : `&lt;p&gt;You can see and decide requests. Raising one needs the &lt;code&gt;${esc(REQUESTER_ROLE)}&lt;/code&gt; role.&lt;/p&gt;`;
+  return shell(`&lt;h1&gt;Purchase requests&lt;/h1&gt;&lt;p id=&quot;who&quot;&gt;Signed in as &lt;strong&gt;${esc(user.name || user.email)}&lt;/strong&gt;${approver ? &quot; (approver)&quot; : &quot;&quot;}&lt;/p&gt;${form}
+&lt;h2&gt;${approver ? &quot;All requests&quot; : &quot;Your requests&quot;}&lt;/h2&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Request&lt;/th&gt;&lt;th&gt;Cost&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;requests&quot;&gt;${rows}&lt;/tbody&gt;&lt;/table&gt;`);
+}
+
+async function handle(req, res) {
+  const url = new URL(req.url, &quot;http://app&quot;);
+  const isApi = url.pathname.startsWith(&quot;/api/&quot;);
+
+  if (url.pathname === &quot;/health&quot;) {
+    return send(res, 200, { status: &quot;ok&quot;, app: APP_NAME, version: VERSION, buildCommit: BUILD_COMMIT, storage: store.kind });
+  }
+
+  const user = await identity.currentUser(req.headers);
+  // Holding neither role means no business here at all.
+  if (!holds(user, REQUESTER_ROLE) &amp;&amp; !holds(user, APPROVER_ROLE)) {
+    throw new IdentityError(`role &#39;${REQUESTER_ROLE}&#39; or &#39;${APPROVER_ROLE}&#39; required`, 403);
+  }
+  // Approvers see everything; everyone else sees only what they raised. The key is user.id, never the email.
+  const scope = () =&gt; (holds(user, APPROVER_ROLE) ? null : user.id);
+
+  if (url.pathname === &quot;/&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, page(user, await store.list(scope())), &quot;text/html; charset=utf-8&quot;);
+  if (url.pathname === &quot;/api/requests&quot; &amp;&amp; req.method === &quot;GET&quot;) return send(res, 200, { items: (await store.list(scope())).map(view) });
+
+  const one = url.pathname.match(/^\/api\/requests\/([^/]+)$/);
+  if (one &amp;&amp; req.method === &quot;GET&quot;) {
+    const r = UUID.test(one[1]) ? await store.get(one[1].toLowerCase()) : null;
+    // Someone else&#39;s request and a request that does not exist get the SAME answer, so nobody can probe for ids.
+    if (!r || (scope() !== null &amp;&amp; r.ownerId !== user.id)) return send(res, 404, { error: &quot;no such request&quot; });
+    return send(res, 200, view(r));
+  }
+
+  if ((url.pathname === &quot;/requests&quot; || url.pathname === &quot;/api/requests&quot;) &amp;&amp; req.method === &quot;POST&quot;) {
+    identity.requireRole(user, REQUESTER_ROLE);
+    const f = await readFields(req, [&quot;item&quot;, &quot;amount&quot;]);
+    const amountCents = parseAmount(f.amount);
+    const problem = !f.item ? &quot;item is required&quot; : f.item.length &gt; 200 ? &quot;item must be at most 200 characters&quot;
+      : amountCents === null ? &quot;amount must be a positive number with at most two decimals&quot; : null;
+    if (problem) {
+      if (isApi) return send(res, 400, { error: problem });
+      return send(res, 400, page(user, await store.list(scope()), { error: problem, values: f }), &quot;text/html; charset=utf-8&quot;);
+    }
+    const r = { id: crypto.randomUUID(), ownerId: user.id, ownerName: user.name || user.email, item: f.item, amountCents, createdAt: new Date().toISOString() };
+    await store.add(r);
+    if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+    return send(res, 201, view({ ...r, status: &quot;pending&quot;, decidedByName: null, decidedAt: null, note: &quot;&quot; }));
+  }
+
+  const decision = url.pathname.match(/^\/(?:api\/)?requests\/([^/]+)\/decision$/);
+  if (decision &amp;&amp; req.method === &quot;POST&quot;) {
+    identity.requireRole(user, APPROVER_ROLE); // checked on the SERVER, whatever the page showed
+    const f = await readFields(req, [&quot;decision&quot;, &quot;note&quot;]);
+    if (f.decision !== &quot;approve&quot; &amp;&amp; f.decision !== &quot;reject&quot;) return send(res, 400, { error: &quot;decision must be approve or reject&quot; });
+    if (f.note.length &gt; 300) return send(res, 400, { error: &quot;note must be at most 300 characters&quot; });
+    const r = UUID.test(decision[1]) ? await store.get(decision[1].toLowerCase()) : null;
+    if (!r) return send(res, 404, { error: &quot;no such request&quot; });
+    if (r.ownerId === user.id) return send(res, 403, { error: &quot;you cannot decide your own request&quot; });
+    const decided = await store.decide(r.id, { status: f.decision === &quot;approve&quot; ? &quot;approved&quot; : &quot;rejected&quot;, byId: user.id, byName: user.name || user.email, note: f.note, at: new Date().toISOString() });
+    if (!decided) return send(res, 409, { error: &quot;this request has already been decided&quot; });
+    if (!isApi) { res.writeHead(303, { location: &quot;/&quot; }); return res.end(); }
+    return send(res, 200, view(decided));
+  }
+
+  return send(res, 404, { error: &quot;not found&quot; });
+}
+
+const server = http.createServer((req, res) =&gt; {
+  handle(req, res).catch((err) =&gt; {
+    const status = err instanceof IdentityError ? err.status : err instanceof SyntaxError ? 400 : 500;
+    if (status &gt;= 500) console.error(err.cause || err);
+    const message = status === 500 ? &quot;something went wrong&quot; : err.message;
+    if (new URL(req.url, &quot;http://app&quot;).pathname.startsWith(&quot;/api/&quot;)) return send(res, status, { error: message });
+    send(res, status, shell(`&lt;h1&gt;Purchase requests&lt;/h1&gt;&lt;p&gt;${esc(message)}&lt;/p&gt;${status === 403 ? &quot;&lt;p&gt;Ask whoever runs this app to give you a role.&lt;/p&gt;&quot; : &quot;&quot;}`), &quot;text/html; charset=utf-8&quot;);
+  });
+});
+store.init().then(
+  () =&gt; server.listen({ port: PORT, host: LISTEN_ADDRESS }, () =&gt; console.log(`${APP_NAME} ${VERSION} listening on :${server.address().port} (requests kept in ${store.kind})`)),
+  (err) =&gt; {
+    console.error(`${err.message}\nDATABASE_URL is set, so this app will not start without its database.`);
+    process.exit(1);
+  },
+);</code></pre>
+<p>It worked when both files parse. This prints nothing and exits 0:</p>
+<pre data-lang="bash"><code>node --check server.js &amp;&amp; node --check store.js</code></pre>
+<h2 id="5-update-the-pretend-portal-the-dockerfile-and-the-test-script">5. Update the pretend portal, the <code>Dockerfile</code> and the test script<a class="d-anchor" href="#5-update-the-pretend-portal-the-dockerfile-and-the-test-script" aria-label="Link to this section">#</a></h2>
+<p>The pretend portal needs one person for each case worth trying: a requester, a second requester, an approver, someone with both roles, and someone with neither.</p>
+<pre data-lang="diff"><code>--- a/dev/mock-portal.js
++++ b/dev/mock-portal.js
+@@ -17,8 +17,11 @@
+ // The people you can sign in as locally. Change these to your app&#39;s own roles:
+ // the role strings must be exactly what your server passes to requireRole.
+ const USERS = {
+-  reader: { sub: &quot;usr_local_reader&quot;, email: &quot;reader@example.test&quot;, name: &quot;Riley Reader&quot;, kind: &quot;employee&quot;, groups: [], roles: [] },
+-  editor: { sub: &quot;usr_local_editor&quot;, email: &quot;editor@example.test&quot;, name: &quot;Eden Editor&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;starter.editor&quot;] },
++  requester: { sub: &quot;usr_local_requester&quot;, email: &quot;riley@example.test&quot;, name: &quot;Riley Requester&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;purchasing.requester&quot;] },
++  colleague: { sub: &quot;usr_local_colleague&quot;, email: &quot;casey@example.test&quot;, name: &quot;Casey Colleague&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;purchasing.requester&quot;] },
++  approver: { sub: &quot;usr_local_approver&quot;, email: &quot;avery@example.test&quot;, name: &quot;Avery Approver&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;purchasing.approver&quot;] },
++  both: { sub: &quot;usr_local_both&quot;, email: &quot;bo@example.test&quot;, name: &quot;Bo Both&quot;, kind: &quot;employee&quot;, groups: [], roles: [&quot;purchasing.requester&quot;, &quot;purchasing.approver&quot;] },
++  nobody: { sub: &quot;usr_local_nobody&quot;, email: &quot;nic@example.test&quot;, name: &quot;Nic Nobody&quot;, kind: &quot;employee&quot;, groups: [], roles: [] },
+ };
+ 
+ async function startMockPortal({ port, appUrl, appId, as = &quot;editor&quot; }) {</code></pre>
+<p>The <code>Dockerfile</code> no longer copies <code>publish.js</code>:</p>
+<pre data-lang="diff"><code>--- a/Dockerfile
++++ b/Dockerfile
+@@ -32,7 +32,7 @@
+ ENV BUILD_COMMIT=$BUILD_COMMIT
+ 
+ # Copy the app itself. Only what runs goes in: no tests, no dev tools.
+-COPY server.js publish.js store.js ./
++COPY server.js store.js ./
+ 
+ # A portal launch (no manifest.json) deploys to port 3000, fixed. If you use the
+ # Advanced path instead, this must match runtime.port in manifest.json.</code></pre>
+<p><code>npm test</code> runs the new test, which is the next step:</p>
+<pre data-lang="diff"><code>--- a/package.json
++++ b/package.json
+@@ -7,7 +7,7 @@
+   &quot;scripts&quot;: {
+     &quot;start&quot;: &quot;node server.js&quot;,
+     &quot;dev&quot;: &quot;node dev/run-local.js&quot;,
+-    &quot;test&quot;: &quot;node test/smoke.js&quot;
++    &quot;test&quot;: &quot;node test/approvals.js&quot;
+   },
+   &quot;engines&quot;: {
+     &quot;node&quot;: &quot;&gt;=22&quot;</code></pre>
+<p>It worked when <code>grep -c &#39;purchasing.approver&#39; dev/mock-portal.js</code> prints <code>2</code> and <code>grep -c &#39;COPY server.js store.js&#39; Dockerfile</code> prints <code>1</code>.</p>
+<h2 id="6-add-the-test">6. Add the test<a class="d-anchor" href="#6-add-the-test" aria-label="Link to this section">#</a></h2>
+<p>Save this as <code>test/approvals.js</code>. It proves who can do what in both directions: each refused case has an allowed case beside it, so a check that can only ever refuse cannot pass by accident. It checks the role rule with a second requester, because the owner of a request is refused for two reasons at once.</p>
+<pre data-lang="js"><code>// test/approvals.js: `node test/approvals.js`. Proves who can do what, in BOTH directions:
+// every &quot;refused&quot; row has an &quot;allowed&quot; row beside it, so the check can fail.
+// Set TEST_DATABASE_URL to an EMPTY scratch Postgres database to run it against the database too.
+const { spawn } = require(&quot;node:child_process&quot;);
+const http = require(&quot;node:http&quot;);
+const path = require(&quot;node:path&quot;);
+const { SignJWT } = require(&quot;jose&quot;);
+const { startMockPortal, USERS } = require(&quot;../dev/mock-portal&quot;);
+
+const APP_ID = &quot;app_approvals_test&quot;;
+let pass = 0, fail = 0;
+function check(name, got, want) {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? &quot;ok  &quot; : &quot;FAIL&quot;} ${name}${ok ? &quot;&quot; : `  (expected ${JSON.stringify(want)}, got ${JSON.stringify(got)})`}`);
+}
+
+(async () =&gt; {
+  const portal = await startMockPortal({ port: 0, appId: APP_ID, as: &quot;requester&quot; });
+  const child = spawn(process.execPath, [path.join(__dirname, &quot;..&quot;, &quot;server.js&quot;)], {
+    env: { PATH: process.env.PATH, PORT: &quot;0&quot;, LISTEN_ADDRESS: &quot;127.0.0.1&quot;, VMNODES_PORTAL_URL: portal.issuer, VMNODES_APP_ID: APP_ID, ...(process.env.TEST_DATABASE_URL ? { DATABASE_URL: process.env.TEST_DATABASE_URL } : {}) },
+    stdio: [&quot;ignore&quot;, &quot;pipe&quot;, &quot;inherit&quot;],
+  });
+  const base = await new Promise((resolve) =&gt; child.stdout.on(&quot;data&quot;, (d) =&gt; { const m = String(d).match(/listening on :(\d+)/); if (m) resolve(`http://127.0.0.1:${m[1]}`); }));
+
+  // Signs a token for one of the mock portal&#39;s people, the way the real gateway would. `over` changes claims.
+  async function call(who, method, p, body, over = {}) {
+    const u = { ...USERS[who], ...over };
+    const token = await new SignJWT({ email: u.email, name: u.name, kind: u.kind, groups: u.groups, roles: u.roles })
+      .setProtectedHeader({ alg: &quot;RS256&quot;, kid: &quot;local-dev&quot; }).setSubject(u.sub).setIssuer(portal.issuer).setAudience(APP_ID)
+      .setIssuedAt().setExpirationTime(&quot;5m&quot;).sign(portal.privateKey);
+    return new Promise((resolve, reject) =&gt; {
+      const req = http.request(base + p, { method, headers: { &quot;x-vmnodes-identity&quot;: token, &quot;content-type&quot;: &quot;application/json&quot; } }, (res) =&gt; {
+        let data = &quot;&quot;; res.on(&quot;data&quot;, (c) =&gt; (data += c));
+        res.on(&quot;end&quot;, () =&gt; resolve({ status: res.statusCode, body: data, json: () =&gt; JSON.parse(data) }));
+      });
+      req.on(&quot;error&quot;, reject);
+      if (body) req.write(JSON.stringify(body));
+      req.end();
+    });
+  }
+
+  // --- who may enter at all ---------------------------------------------------
+  check(&quot;a person with neither role -&gt; 403&quot;, (await call(&quot;nobody&quot;, &quot;GET&quot;, &quot;/api/requests&quot;)).status, 403);
+  check(&quot;CONTROL: a requester gets in&quot;, (await call(&quot;requester&quot;, &quot;GET&quot;, &quot;/api/requests&quot;)).status, 200);
+
+  // --- raising a request ------------------------------------------------------
+  const made = await call(&quot;requester&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { item: &quot;Standing desk &lt;script&gt;&quot;, amount: &quot;249.9&quot; });
+  check(&quot;CONTROL: a requester can raise a request -&gt; 201, pending, amount in pounds and pence&quot;, [made.status, made.json().status, made.json().amount], [201, &quot;pending&quot;, &quot;249.90&quot;]);
+  const id = made.json().id;
+  check(&quot;an approver who is not a requester cannot raise one -&gt; 403&quot;, (await call(&quot;approver&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { item: &quot;Pens&quot;, amount: &quot;5&quot; })).status, 403);
+  for (const amount of [&quot;-5&quot;, &quot;0&quot;, &quot;abc&quot;, &quot;12.345&quot;, &quot;1e3&quot;, &quot;&quot;]) {
+    check(`amount ${JSON.stringify(amount)} -&gt; 400`, (await call(&quot;requester&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { item: &quot;Pens&quot;, amount })).status, 400);
+  }
+  check(&quot;a missing item -&gt; 400&quot;, (await call(&quot;requester&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { amount: &quot;5&quot; })).status, 400);
+
+  // --- seeing: own records only, unless approver ---------------------------------
+  check(&quot;the requester sees their own request&quot;, (await call(&quot;requester&quot;, &quot;GET&quot;, &quot;/api/requests&quot;)).json().items.map((r) =&gt; r.id), [id]);
+  check(&quot;ANOTHER requester sees none of it&quot;, (await call(&quot;colleague&quot;, &quot;GET&quot;, &quot;/api/requests&quot;)).json().items, []);
+  check(&quot;an approver sees every request&quot;, (await call(&quot;approver&quot;, &quot;GET&quot;, &quot;/api/requests&quot;)).json().items.map((r) =&gt; r.id), [id]);
+  check(&quot;CONTROL: the owner can open it by id -&gt; 200&quot;, (await call(&quot;requester&quot;, &quot;GET&quot;, `/api/requests/${id}`)).status, 200);
+  const other = await call(&quot;colleague&quot;, &quot;GET&quot;, `/api/requests/${id}`);
+  const missing = await call(&quot;colleague&quot;, &quot;GET&quot;, &quot;/api/requests/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11&quot;);
+  check(&quot;another requester opening it by id -&gt; 404, the SAME answer as an id that does not exist&quot;, [other.status, other.body], [missing.status, missing.body]);
+  check(&quot;a different person with the SAME EMAIL (different id) sees none of it: the key is id, not email&quot;, (await call(&quot;requester&quot;, &quot;GET&quot;, &quot;/api/requests&quot;, undefined, { sub: &quot;usr_someone_else&quot; })).json().items, []);
+
+  // --- deciding: only approvers, and every time -------------------------------
+  check(&quot;the requester cannot approve their own request -&gt; 403 (the role check and the own-request rule both refuse this one)&quot;, (await call(&quot;requester&quot;, &quot;POST&quot;, `/api/requests/${id}/decision`, { decision: &quot;approve&quot; })).status, 403);
+  check(&quot;ANOTHER requester cannot approve -&gt; 403 (only the role check can refuse this one)&quot;, (await call(&quot;colleague&quot;, &quot;POST&quot;, `/api/requests/${id}/decision`, { decision: &quot;approve&quot; })).status, 403);
+  check(&quot;...and nothing changed&quot;, (await call(&quot;approver&quot;, &quot;GET&quot;, `/api/requests/${id}`)).json().status, &quot;pending&quot;);
+  check(&quot;a decision that is neither approve nor reject -&gt; 400&quot;, (await call(&quot;approver&quot;, &quot;POST&quot;, `/api/requests/${id}/decision`, { decision: &quot;maybe&quot; })).status, 400);
+  check(&quot;a made-up request id -&gt; 404&quot;, (await call(&quot;approver&quot;, &quot;POST&quot;, &quot;/api/requests/6f1c2a52-8f0d-4d64-9d0e-1c7b0e2a9b11/decision&quot;, { decision: &quot;approve&quot; })).status, 404);
+  const rejected = await call(&quot;approver&quot;, &quot;POST&quot;, `/api/requests/${id}/decision`, { decision: &quot;reject&quot;, note: &quot;Over budget&quot; });
+  check(&quot;CONTROL: an approver can reject -&gt; 200, with the reason&quot;, [rejected.status, rejected.json().status, rejected.json().note, rejected.json().decidedByName], [200, &quot;rejected&quot;, &quot;Over budget&quot;, &quot;Avery Approver&quot;]);
+  check(&quot;deciding twice -&gt; 409, the first decision stands&quot;, [(await call(&quot;approver&quot;, &quot;POST&quot;, `/api/requests/${id}/decision`, { decision: &quot;approve&quot; })).status, (await call(&quot;requester&quot;, &quot;GET&quot;, `/api/requests/${id}`)).json().status], [409, &quot;rejected&quot;]);
+
+  // --- nobody decides their own request -----------------------------------------
+  const mine = (await call(&quot;both&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { item: &quot;Monitor&quot;, amount: &quot;180&quot; })).json().id;
+  check(&quot;someone who holds both roles cannot decide their own request -&gt; 403&quot;, (await call(&quot;both&quot;, &quot;POST&quot;, `/api/requests/${mine}/decision`, { decision: &quot;approve&quot; })).status, 403);
+  check(&quot;...but another approver can -&gt; 200&quot;, (await call(&quot;approver&quot;, &quot;POST&quot;, `/api/requests/${mine}/decision`, { decision: &quot;approve&quot; })).status, 200);
+
+  // --- the page: text is escaped, buttons follow the role ------------------------
+  const asReq = await call(&quot;requester&quot;, &quot;GET&quot;, &quot;/&quot;);
+  check(&quot;typed text is escaped, not run as markup&quot;, asReq.body.includes(&quot;Standing desk &amp;lt;script&amp;gt;&quot;) &amp;&amp; !asReq.body.includes(&quot;&lt;script&gt;&quot;), true);
+  check(&quot;a requester&#39;s page has no Approve button&quot;, asReq.body.includes(&quot;&gt;Approve&lt;&quot;), false);
+  const second = (await call(&quot;colleague&quot;, &quot;POST&quot;, &quot;/api/requests&quot;, { item: &quot;Chair&quot;, amount: &quot;99&quot; })).json().id;
+  check(&quot;CONTROL: an approver&#39;s page has an Approve button for a pending request&quot;, (await call(&quot;approver&quot;, &quot;GET&quot;, &quot;/&quot;)).body.includes(`/requests/${second}/decision`), true);
+
+  const FLOOR = 25;
+  if (pass + fail &lt; FLOOR) { console.log(`FAIL only ${pass + fail} checks ran, expected at least ${FLOOR}`); fail++; }
+  console.log(`\npassed=${pass} failed=${fail}`);
+  child.kill(); portal.server.close();
+  process.exit(fail === 0 ? 0 : 1);
+})().catch((e) =&gt; { console.error(&quot;test crashed:&quot;, e); process.exit(1); });</code></pre>
+<pre data-lang="bash"><code>npm test</code></pre>
+<p>It worked when the last line is <code>passed=29 failed=0</code>. To run it against the database as well, give it an empty scratch Postgres database: <code>TEST_DATABASE_URL=postgres://localhost/approvals_scratch npm test</code>.</p>
+<h2 id="7-try-it-on-your-computer">7. Try it on your computer<a class="d-anchor" href="#7-try-it-on-your-computer" aria-label="Link to this section">#</a></h2>
+<p>The pretend portal&#39;s default person no longer exists, so name one:</p>
+<pre data-lang="bash"><code>npm run dev -- requester</code></pre>
+<p>Open <code>http://127.0.0.1:4100</code>.</p>
+<p>It worked when the page is headed <strong>Purchase requests</strong>, reads &quot;Signed in as Riley Requester&quot;, shows <strong>What do you need?</strong>, <strong>Cost</strong> and <strong>Send request</strong>, and has a table headed <strong>Your requests</strong>. Raise a request: the row shows &quot;Waiting&quot; and no <strong>Approve</strong> button, because you cannot decide your own.</p>
+<p>Now switch person. Open <code>http://127.0.0.1:4100/_as/colleague</code>: the table is empty, because Casey did not raise it. Open <code>http://127.0.0.1:4100/_as/approver</code>: the page reads &quot;Signed in as Avery Approver (approver)&quot;, the table is headed <strong>All requests</strong>, and the row has a reason box with <strong>Approve</strong> and <strong>Reject</strong>. Press <strong>Approve</strong>. It worked when the row reads &quot;Approved by Avery Approver&quot;. Stop the command with Ctrl+C.</p>
+<h2 id="8-put-it-online">8. Put it online<a class="d-anchor" href="#8-put-it-online" aria-label="Link to this section">#</a></h2>
+<p>Commit, push and launch as <code>purchase-requests</code>, following <a href="/getting-started">Getting started</a> steps 3 to 6.</p>
+<p>It worked when the badge reads <strong>Working</strong> and a line reads &quot;You have every role purchase-requests declares: purchasing.requester, purchasing.approver.&quot;</p>
+<h2 id="9-give-the-roles-to-the-right-people">9. Give the roles to the right people<a class="d-anchor" href="#9-give-the-roles-to-the-right-people" aria-label="Link to this section">#</a></h2>
+<p>On the app&#39;s <strong>People</strong> tab, press <strong>Change roles</strong> on each person, tick the roles and press <strong>Save roles</strong>. Give the budget holder <code>purchasing.approver</code> and everyone who may ask for things <code>purchasing.requester</code>. It worked when each row lists the roles you ticked.</p>
+<p>The budget holder must already be a member of the org. There is no portal screen for adding one, so ask your VMnodes contact. See <a href="/reference/limits">Limits</a>.</p>
+<h2 id="check-it-works">Check it works<a class="d-anchor" href="#check-it-works" aria-label="Link to this section">#</a></h2>
+<ol><li><code>npm test</code> ends <code>passed=29 failed=0</code>.</li><li>With <code>npm run dev -- requester</code> running in another terminal, walk the whole rule from the command line. Each command&#39;s expected output follows it. Raise a request as the requester. This prints <code>303</code>: <code>bash curl -s -o /dev/null -w &#39;%{http_code}\n&#39; -X POST -d &#39;item=Standing+desk&amp;amount=249.90&#39; http://127.0.0.1:4100/requests </code> Another requester sees none of it. This prints <code>{&quot;items&quot;:[]}</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/colleague curl -s http://127.0.0.1:4100/api/requests </code> Another requester cannot approve it. Switch back, copy the request&#39;s id, then try as the colleague. The last command prints <code>{&quot;error&quot;:&quot;role &#39;purchasing.approver&#39; required&quot;} 403</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/requester ID=$(curl -s http://127.0.0.1:4100/api/requests | node -pe &#39;JSON.parse(require(&quot;fs&quot;).readFileSync(0,&quot;utf8&quot;)).items[0].id&#39;) curl -s -o /dev/null http://127.0.0.1:4100/_as/colleague curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> The approver can. The last command prints the request with <code>&quot;status&quot;:&quot;approved&quot;</code>, <code>&quot;decidedByName&quot;:&quot;Avery Approver&quot;</code> and <code>&quot;note&quot;:&quot;Within budget&quot;</code>, then <code> 200</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/approver curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;,&quot;note&quot;:&quot;Within budget&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> A second decision is refused and the first stands. This prints <code>{&quot;error&quot;:&quot;this request has already been decided&quot;} 409</code>: <code>bash curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;reject&quot;}&#39; http://127.0.0.1:4100/api/requests/$ID/decision </code> Nobody decides their own request, even holding both roles. This prints <code>{&quot;error&quot;:&quot;you cannot decide your own request&quot;} 403</code>: <code>bash curl -s -o /dev/null http://127.0.0.1:4100/_as/both curl -s -o /dev/null -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;item&quot;:&quot;Monitor&quot;,&quot;amount&quot;:&quot;180&quot;}&#39; http://127.0.0.1:4100/api/requests MINE=$(curl -s http://127.0.0.1:4100/api/requests | node -pe &#39;JSON.parse(require(&quot;fs&quot;).readFileSync(0,&quot;utf8&quot;)).items.find((r) =&gt; r.item === &quot;Monitor&quot;).id&#39;) curl -s -w &#39; %{http_code}\n&#39; -X POST -H &#39;content-type: application/json&#39; -d &#39;{&quot;decision&quot;:&quot;approve&quot;}&#39; http://127.0.0.1:4100/api/requests/$MINE/decision </code></li><li>After the launch, <code>curl -s https://purchase-requests.acme.vmnodes.com/health</code> prints <code>&quot;status&quot;:&quot;ok&quot;</code> and <code>&quot;storage&quot;:&quot;postgres&quot;</code>.</li><li>On the live app, signed in as the person who launched it (who holds both roles), raise a request. It worked when the row reads &quot;Waiting&quot; with no <strong>Approve</strong> button. Sign in as the budget holder, who holds only <code>purchasing.approver</code>: the same row has <strong>Approve</strong> and <strong>Reject</strong>.</li></ol>
+<h2 id="traps">Traps<a class="d-anchor" href="#traps" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>The role check belongs on the server, on the decision route.</strong> A hidden button stops nobody who sends the request directly. <code>server.js</code> calls <code>identity.requireRole(user, APPROVER_ROLE)</code> on every decision, whatever the page showed.</li><li><strong>Declare both roles, and check both strings.</strong> A role the code checks and <code>vmnodes.json</code> does not declare can never be given to anyone, so nobody could approve. The strings in <code>vmnodes.json</code>, <code>server.js</code> and <code>dev/mock-portal.js</code> must match.</li><li><strong>Key ownership on the identity <code>id</code>, never the email.</strong> An address can be reused or changed. <code>owner_id</code> holds <code>user.id</code>.</li><li><strong>Answer a request that is not yours exactly like one that does not exist.</strong> Both answer 404 <code>no such request</code>, so nobody can probe for ids. A 403 for &quot;not yours&quot; tells them the id is real.</li><li><strong>Refuse self-approval on the server.</strong> The page hides the buttons on your own request, but <code>you cannot decide your own request</code> is what enforces it. Giving one person both roles is allowed; deciding their own request is not.</li><li><strong>Decide only a pending request, in the same statement that writes the decision.</strong> The <code>where status = &#39;pending&#39;</code> makes two approvers pressing <strong>Approve</strong> at once produce one decision and one <code>this request has already been decided</code>, not two.</li><li><strong>One account cannot prove separation of duties.</strong> The person who launches the app holds every role, so they can raise requests but not approve them, and that is the only thing one account can show. Approval needs a second org member who holds only the approver role.</li><li><strong>A role added by an update reaches nobody.</strong> If you add a role later, give it with <strong>Change roles</strong>. See <a href="/concepts/roles">Roles</a>.</li><li><strong>Money in whole cents.</strong> <code>parseAmount</code> accepts <code>12</code>, <code>12.5</code> and <code>12.50</code> and refuses <code>-3</code>, <code>1e3</code> and <code>12.345</code>, so a float never reaches the database.</li><li><strong>Test &quot;cannot approve&quot; with a person who did not raise the request.</strong> The owner is refused by the own-request rule as well, so that case stays green even if the role check is removed. The second requester in <code>test/approvals.js</code> is the one that proves the role rule.</li></ul>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/roles">Roles</a></li><li><a href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a href="/reference/limits">Limits</a></li></ul>
+  <p class="d-meta"><a href="/how-to/approvals.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#who-may-do-what">Who may do what</a></li><li class="l2"><a href="#1-remove-what-this-app-does-not-use">1. Remove what this app does not use</a></li><li class="l2"><a href="#2-declare-both-roles-and-a-database">2. Declare both roles and a database</a></li><li class="l2"><a href="#3-replace-storejs">3. Replace store.js</a></li><li class="l2"><a href="#4-replace-serverjs">4. Replace server.js</a></li><li class="l2"><a href="#5-update-the-pretend-portal-the-dockerfile-and-the-test-script">5. Update the pretend portal, the Dockerfile and the test script</a></li><li class="l2"><a href="#6-add-the-test">6. Add the test</a></li><li class="l2"><a href="#7-try-it-on-your-computer">7. Try it on your computer</a></li><li class="l2"><a href="#8-put-it-online">8. Put it online</a></li><li class="l2"><a href="#9-give-the-roles-to-the-right-people">9. Give the roles to the right people</a></li><li class="l2"><a href="#check-it-works">Check it works</a></li><li class="l2"><a href="#traps">Traps</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>

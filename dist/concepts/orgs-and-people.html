@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orgs and people · VMnodes docs</title>
+<meta name="description" content="Understand who can do what in an org: who is an administrator, who is a member, and how a person gets into an app. Read this before you plan who will use the app you are building.">
+<link rel="stylesheet" href="/assets/vmnodes.css">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="text/markdown" href="/concepts/orgs-and-people.md" title="This page as Markdown">
+</head>
+<body>
+<a class="d-skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-brand" href="/"><span class="d-tile" aria-hidden="true"></span>VMnodes <span class="d-sub">docs</span></a>
+  <nav aria-label="Site"><a href="/getting-started">Get started</a><a href="/api/">API</a><a href="/llms.txt">llms.txt</a></nav>
+</header>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Docs"><details open><summary class="vm-sr-only">Contents</summary><h2>Start</h2><ul><li><a class="vm-tap" href="/">Overview</a></li><li><a class="vm-tap" href="/getting-started">Getting started</a></li></ul><h2>How-to</h2><ul><li><a class="vm-tap" href="/how-to/form-and-list">Build a form-and-list app</a></li><li><a class="vm-tap" href="/how-to/approvals">Submit and approve</a></li><li><a class="vm-tap" href="/how-to/keep-data-through-updates">Keep data through updates</a></li><li><a class="vm-tap" href="/how-to/share-data">Share data</a></li><li><a class="vm-tap" href="/how-to/read-shared-data">Read shared data</a></li><li><a class="vm-tap" href="/how-to/change-an-app">Change an app someone else built</a></li></ul><h2>Concepts</h2><ul><li><a class="vm-tap" href="/concepts/orgs-and-people" aria-current="page">Orgs and people</a></li><li><a class="vm-tap" href="/concepts/apps">Apps</a></li><li><a class="vm-tap" href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a class="vm-tap" href="/concepts/roles">Roles</a></li><li><a class="vm-tap" href="/concepts/data">Data</a></li><li><a class="vm-tap" href="/concepts/sharing">Sharing</a></li><li><a class="vm-tap" href="/concepts/connectors">Connectors</a></li></ul><h2>Reference</h2><ul><li><a class="vm-tap" href="/reference/vmnodes-json">vmnodes.json reference</a></li><li><a class="vm-tap" href="/reference/environment">Environment variables</a></li><li><a class="vm-tap" href="/reference/build-and-run">Build, run and security checks</a></li><li><a class="vm-tap" href="/reference/identity-sdk">Identity SDK</a></li><li><a class="vm-tap" href="/reference/publish-api">Publish and query API</a></li><li><a class="vm-tap" href="/reference/manifest-json">manifest.json reference</a></li><li><a class="vm-tap" href="/reference/limits">Limits and what is not possible yet</a></li><li><a class="vm-tap" href="/troubleshooting">Troubleshooting</a></li></ul><h2>API and MCP</h2><ul><li><a class="vm-tap" href="/api/">API reference</a></li><li><a class="vm-tap" href="/mcp">MCP server</a></li></ul></details></nav>
+  <main id="content"><article class="d-doc"><h1 id="orgs-and-people">Orgs and people</h1>
+<p>Understand who can do what in an org: who is an administrator, who is a member, and how a person gets into an app. Read this before you plan who will use the app you are building.</p>
+<h2 id="org">Org<a class="d-anchor" href="#org" aria-label="Link to this section">#</a></h2>
+<p>An org is a customer organisation on VMnodes. It has a short name, its slug (3 to 30 lowercase letters, digits and hyphens), and its portal is at <code>apps.&lt;slug&gt;.vmnodes.com</code>. Its apps live at <code>&lt;app&gt;.&lt;slug&gt;.vmnodes.com</code>. The examples in these docs use the org <code>acme</code>.</p>
+<ul><li><strong>How an org starts.</strong> Sign-up is by invite today. An invite code comes from your VMnodes contact, and so does the sign-up address. Self-serve sign-up is not open.</li><li><strong>What an org owns.</strong> Its people, its apps, its shared data and its compute. <strong>Get compute</strong> creates the host that runs the org&#39;s apps. Your plan sets how many hosts the org may have; a second request past the limit answers &quot;Your plan includes &lt;n&gt; host(s).&quot;</li></ul>
+<h2 id="administrator">Administrator<a class="d-anchor" href="#administrator" aria-label="Link to this section">#</a></h2>
+<p>An administrator is an org member who runs the org&#39;s apps in the portal. The person who signs the org up is its first administrator. Only an administrator can:</p>
+<ul><li>press <strong>Put an app online</strong> and <strong>Update to latest commit</strong>;</li><li>use <strong>Change roles</strong>, attach a group, and read the <strong>People</strong> and <strong>Shares</strong> tabs;</li><li>turn shared fields on and off in the <strong>Shares</strong> tab;</li><li>open <strong>Usage</strong> and <strong>Console</strong> (logs and roll back).</li></ul>
+<p>A member who is not an administrator sees the <strong>Overview</strong> tab of an app and nothing more. If they open an administrator screen they get &quot;Nothing to see here&quot; or &quot;Nothing to launch here&quot;.</p>
+<h2 id="member">Member<a class="d-anchor" href="#member" aria-label="Link to this section">#</a></h2>
+<p>A member is a person in the org&#39;s directory. Only members can sign in to the portal or to any of the org&#39;s apps. A person who is not a member receives no sign-in code and gets the same answer as an unknown email address.</p>
+<blockquote><p><strong>Trap:</strong> a portal session cannot add a person to the org. The <strong>People</strong> tab lists people who are already members and gives them roles; it has no invite button. Ask your VMnodes contact to add anyone new, before you plan an app that needs a second person.</p></blockquote>
+<h2 id="access">Access<a class="d-anchor" href="#access" aria-label="Link to this section">#</a></h2>
+<p>Access means being let into one app. It is separate from being an administrator and separate from a role.</p>
+<ul><li>Every app has its own list of who may open it. A member who is not on the list sees the page &quot;Not authorised&quot;: &quot;Your account is signed in, but it has no entitlement to this application.&quot; This is true for administrators too.</li><li>The person who puts an app online gets access to it at once, and every role the app declares.</li><li>Giving someone a role also gives them access. Taking a role away does not take away access.</li><li>Attaching a group on the <strong>People</strong> tab gives everyone in the group access, including people added to the group later, and optionally one role. You cannot remove a group from that page yet, and a group can only be created by your VMnodes contact.</li><li><strong>Your apps</strong> lists only the apps the signed-in person has access to.</li></ul>
+<p>Anyone outside the org cannot be given access. There is no sign-up page for an app&#39;s own customers.</p>
+<blockquote><p><strong>Coming:</strong> letting an app&#39;s own customers sign themselves up. Today only org members can use an app.</p></blockquote>
+<h2 id="related">Related<a class="d-anchor" href="#related" aria-label="Link to this section">#</a></h2>
+<ul><li><a href="/concepts/roles">Roles</a></li><li><a href="/concepts/sign-in-and-identity">Sign-in and identity</a></li><li><a href="/concepts/apps">Apps</a></li><li><a href="/reference/limits">Limits</a></li></ul>
+  <p class="d-meta"><a href="/concepts/orgs-and-people.md">This page as Markdown</a> · <a href="/llms-full.txt">All docs in one file</a></p>
+  </article></main>
+  <aside class="d-toc" aria-label="On this page"><h2>On this page</h2><ul><li class="l2"><a href="#org">Org</a></li><li class="l2"><a href="#administrator">Administrator</a></li><li class="l2"><a href="#member">Member</a></li><li class="l2"><a href="#access">Access</a></li><li class="l2"><a href="#related">Related</a></li></ul></aside>
+</div>
+</body>
+</html>
